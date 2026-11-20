@@ -1,15 +1,14 @@
 import { execFileSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
-import pool, { botPreviewDatabase, connectionOptions } from './db.js';
+import pool, { botPreviewDatabase, connectionOptions, transaction } from './db.js';
+import { migrate } from './migrate.js';
 
 async function replacePreview(previewPool, nominations) {
-    const schema = await readFile(new URL('./init.sql', import.meta.url), 'utf8');
-    const client = await previewPool.connect();
-    try {
-        await client.query('BEGIN');
-        await client.query(schema);
+    return transaction(async (client) => {
+        await migrate(client);
+        const { rows: [settings] } = await client.query('SELECT results_published FROM settings WHERE id = 1 FOR UPDATE');
+        if (settings.results_published) throw new Error('Перед импортом снимите результаты предпросмотра с публикации.');
         await client.query('LOCK TABLE nominations IN EXCLUSIVE MODE');
         const { rowCount } = await client.query('SELECT 1 FROM nominations WHERE NOT suggestions_preview LIMIT 1');
         if (rowCount) throw new Error('В базе предпросмотра уже есть данные, созданные вручную.');
@@ -39,14 +38,12 @@ async function replacePreview(previewPool, nominations) {
             imported++;
             suggestions += nomination.suggestions.length;
         }
-        await client.query('COMMIT');
+        await client.query(`
+            SELECT setval(pg_get_serial_sequence('nominations', 'id'), GREATEST(max(id), 1), count(*) > 0)
+            FROM nominations
+        `);
         return { imported, suggestions };
-    } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-    } finally {
-        client.release();
-    }
+    }, previewPool);
 }
 
 const botDirectory = process.argv[2];

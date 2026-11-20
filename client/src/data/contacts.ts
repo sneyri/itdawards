@@ -1,9 +1,9 @@
+export const ITD_CHANNEL_URL = 'https://t.me/itditp'
+
 export const telegramChannels = [
-  { label: 'ИТД · Telegram', shortLabel: 'ИТД', href: 'https://t.me/itd' },
-  { label: 'ИТП · Telegram', shortLabel: 'ИТП', href: 'https://t.me/itp' },
+  { label: 'ИТД ИТП', shortLabel: 'ИТД ИТП', href: ITD_CHANNEL_URL },
 ]
 
 export const telegramContacts = [
   { label: '@sneyr', href: 'https://t.me/sneyr' },
-  { label: '@ktitd113', href: 'https://t.me/ktitd113' },
 ]

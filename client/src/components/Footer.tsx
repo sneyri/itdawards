@@ -2,12 +2,9 @@ import { Link } from 'react-router-dom'
 import { ArrowUp, Send } from 'lucide-react'
 import { EVENT } from '../data/event'
 import { telegramChannels, telegramContacts } from '../data/contacts'
-import { useVotes } from '../context/VotesContext'
 import { Logo } from './Logo'
 
 export function Footer() {
-  const { isPreview } = useVotes()
-
   return (
     <footer className="site-footer">
       <div className="container">
@@ -25,16 +22,14 @@ export function Footer() {
           <nav className="footer__col" aria-label="Навигация в подвале">
             <h2>Навигация</h2>
             <Link to="/nominations">Номинации</Link>
-            <Link to="/results">Результаты</Link>
             <Link to="/my-votes">Мой голос</Link>
           </nav>
 
-          <nav className="footer__col" aria-label="Информация о премии">
-            <h2>Премия</h2>
-            <Link to="/about">О проекте</Link>
-            <Link to="/about#rules">Правила</Link>
-            <Link to="/about#faq">FAQ</Link>
-            <Link to="/ceremony">Церемония</Link>
+          <nav className="footer__col" aria-label="Помощь">
+            <h2>Помощь</h2>
+            <Link to="/questions">Вопросы</Link>
+            <Link to="/questions#faq">Частые вопросы</Link>
+            <Link to="/questions#contacts">Контакты</Link>
           </nav>
 
           <div className="footer__col">
@@ -56,7 +51,6 @@ export function Footer() {
 
         <div className="footer__bottom">
           <span>© 2026 ITD AWARDS. Сделано сообществом для сообщества.</span>
-          {isPreview && <span className="footer__demo">Тестовое голосование по предложениям из Telegram-бота.</span>}
           <a href="#top" className="footer__up">
             Наверх
             <ArrowUp size={14} aria-hidden="true" />

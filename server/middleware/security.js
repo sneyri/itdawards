@@ -2,8 +2,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { sendError } from './errorHandler.js';
+import { publicOrigin } from '../config.js';
+import pool from '../database/db.js';
 
-const publicOrigin = process.env.PUBLIC_ORIGIN;
 const allowedOrigins = [publicOrigin, ...((process.env.CORS_ORIGINS ?? '').split(','))]
     .map((origin) => origin?.trim()).filter(Boolean);
 for (const origin of allowedOrigins) {
@@ -18,6 +19,8 @@ export const securityHeaders = helmet({
     strictTransportSecurity: publicOrigin?.startsWith('https:') ? undefined : false,
     contentSecurityPolicy: {
         directives: {
+            imgSrc: ["'self'", 'https:'],
+            mediaSrc: ["'self'", 'https:'],
             upgradeInsecureRequests: publicOrigin?.startsWith('https:') ? [] : null,
         },
     },
@@ -32,7 +35,7 @@ export function checkOrigin(req, res, next) {
     if (req.method === 'GET' || req.method === 'HEAD') return next();
 
     const origin = req.get('origin');
-    if (origin ? !allowed(req, origin) : req.get('sec-fetch-site') === 'cross-site') {
+    if (!origin || !allowed(req, origin)) {
         return sendError(res, 403, 'origin_forbidden', 'Запрос с этого сайта запрещён.');
     }
     next();
@@ -43,7 +46,7 @@ export const apiCors = cors((req, callback) => {
     callback(null, {
         origin: origin && allowed(req, origin) ? origin : false,
         credentials: true,
-        methods: ['GET', 'HEAD', 'POST', 'OPTIONS'],
+        methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type'],
         exposedHeaders: ['RateLimit', 'RateLimit-Policy', 'Retry-After'],
     });
@@ -58,18 +61,27 @@ function limiter(windowMs, limit, options = {}) {
 }
 
 export const limitApi = limiter(60_000, 240);
-export const limitAuth = limiter(15 * 60_000, 30);
-export const limitEmailCode = limiter(10 * 60_000, 12);
-export const limitSignIn = limiter(15 * 60_000, 10, { skipSuccessfulRequests: true });
-export const limitSignInAccount = limiter(15 * 60_000, 30, {
-    skip: (req) => typeof req.body?.username !== 'string' || !req.body.username.trim() || req.body.username.length > 64,
-    keyGenerator: (req) => req.body.username.trim().replace(/^@/, '').toLowerCase(),
+export const limitBot = limiter(60_000, 300);
+export const limitLogin = limiter(10 * 60_000, 20, {
     skipSuccessfulRequests: true,
+    async handler(req, res) {
+        if (req.rateLimit.used === req.rateLimit.limit + 1) {
+            try {
+                await pool.query(`
+                    INSERT INTO audit_logs (action, target_type, target_id)
+                    VALUES ('auth.rate_limited', 'security', 'telegram_login')
+                `);
+            } catch (error) {
+                console.error('Ошибка записи аудита:', error.code ?? error.name);
+            }
+        }
+        return sendError(res, 429, 'rate_limited', 'Слишком много попыток входа. Попробуйте позже.');
+    },
 });
 export const limitVoteIp = limiter(60_000, 90);
-export const limitVoterChallenge = limiter(10 * 60_000, 24);
-export const limitVoterIssuance = limiter(10 * 60_000, 12, { skip: (req) => Boolean(req.voterId) });
-export const limitVoter = limiter(60_000, 30, {
-    skip: (req) => !req.voterId,
-    keyGenerator: (req) => req.voterId,
-});
+export const limitVoter = limiter(60_000, 30, { keyGenerator: (req) => req.user.id });
+
+export function preventCaching(_req, res, next) {
+    res.set('Cache-Control', 'no-store');
+    next();
+}

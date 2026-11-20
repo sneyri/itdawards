@@ -9,11 +9,12 @@ export function ScrollToTop() {
     if (hash) {
       const target = document.getElementById(hash.slice(1))
       if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
         previousPath.current = pathname
-        target.scrollIntoView()
         return
       }
     }
+
     if (previousPath.current === pathname) return
     previousPath.current = pathname
 

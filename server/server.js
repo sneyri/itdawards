@@ -1,28 +1,33 @@
-import express from 'express';
-import api from './routes/api.js';
-import auth from './routes/auth.js';
-import frontend from './routes/frontend.js';
-import { errorHandler } from './middleware/errorHandler.js';
-import { securityHeaders } from './middleware/security.js';
-import { startLocalAuth } from './startLocalAuth.js';
+import { createApp } from './app.js';
+import pool from './database/db.js';
 
-const app = express();
 const port = process.env.PORT || 3000;
 
-app.disable('x-powered-by');
-if (process.env.TRUST_PROXY === 'loopback') app.set('trust proxy', 'loopback');
-app.use(securityHeaders);
-app.use(auth);
-app.use('/api', api);
-app.use(frontend);
-app.use(errorHandler);
-
-app.listen(port, '127.0.0.1', (error) => {
-    if (error) {
-        console.error('Ошибка запуска Express:', error.message);
-        process.exitCode = 1;
-        return;
-    }
-    console.log(`ITD Awards — http://127.0.0.1:${port}`);
-    startLocalAuth();
+try {
+    const { rowCount } = await pool.query('SELECT id FROM settings WHERE id = 1');
+    if (!rowCount) throw new Error('Настройки голосования отсутствуют.');
+} catch (error) {
+    console.error('Не удалось открыть PostgreSQL. Проверьте настройки и выполните npm run db:init.', error.code ?? error.name);
+    await pool.end();
+    process.exit(1);
+}
+// Bind IPv4 loopback explicitly so localhost works with clients using IPv4.
+const host = '127.0.0.1';
+const server = createApp().listen(port, host);
+server.once('listening', () => {
+    const listeningPort = server.address().port;
+    console.log(`ITD Awards — http://${host}:${listeningPort}`);
+    process.send?.({ port: listeningPort });
 });
+
+server.once('error', async (error) => {
+    console.error('Ошибка запуска Express:', error.code ?? error.name);
+    process.exitCode = 1;
+    await pool.end();
+});
+
+function stop() {
+    server.close(() => pool.end());
+}
+process.once('SIGINT', stop);
+process.once('SIGTERM', stop);

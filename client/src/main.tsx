@@ -16,7 +16,6 @@ import '@fontsource/manrope/800.css'
 import './styles.css'
 import './integration.css'
 import App from './App'
-import { ScrollToTop } from './components/ScrollToTop'
 import { ToastProvider } from './context/ToastContext'
 import { VotesProvider } from './context/VotesContext'
 
@@ -30,7 +29,6 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <ToastProvider>
         <VotesProvider>
-          <ScrollToTop />
           <App />
         </VotesProvider>
       </ToastProvider>

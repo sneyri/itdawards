@@ -16,6 +16,10 @@ export function errorHandler(error, req, res, next) {
     if (error instanceof URIError && error.status === 400) {
         return sendError(res, 400, 'invalid_id', 'Некорректный идентификатор.');
     }
-    console.error('Ошибка обработки запроса:', error.code ?? error.message);
+    console.error('Ошибка обработки запроса:', error.code ?? error.name);
     return sendError(res, 500, 'server_error', 'Не удалось обработать запрос. Попробуйте ещё раз.');
+}
+
+export function routeNotFound(_req, res) {
+    return sendError(res, 404, 'route_not_found', 'Маршрут не найден.');
 }

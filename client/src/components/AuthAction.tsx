@@ -1,20 +1,18 @@
 import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useVotes } from '../context/VotesContext'
 import { useToast } from '../context/ToastContext'
+import { signOut } from '../lib/awardsApi'
 
-export function AuthAction({ className }: { className: string }) {
+export function AuthAction({ className, label = 'Войти' }: { className: string; label?: string }) {
   const { auth } = useVotes()
   const { showToast } = useToast()
-  const { pathname, search, hash } = useLocation()
+  const location = useLocation()
   const [busy, setBusy] = useState(false)
-  if (auth.mode !== 'account') return null
-
-  async function signOut() {
+  async function logOut() {
     setBusy(true)
     try {
-      const response = await fetch('/auth/logout', { method: 'POST' })
-      if (!response.ok) throw new Error('Logout failed')
+      await signOut()
       window.location.reload()
     } catch {
       setBusy(false)
@@ -22,10 +20,10 @@ export function AuthAction({ className }: { className: string }) {
     }
   }
 
-  if (auth.signedIn) {
-    return <button type="button" className={className} disabled={busy} onClick={signOut}>Выйти</button>
+  if (auth.user) {
+    return <button type="button" className={className} disabled={busy} onClick={logOut}>Выйти</button>
   }
 
-  const returnTo = new URLSearchParams({ return_to: pathname + search + hash })
-  return <a className={className} href={`/auth/login?${returnTo}`}>Войти</a>
+  const returnTo = new URLSearchParams({ return_to: location.pathname + location.search + location.hash })
+  return <Link className={className} to={`/sign-in?${returnTo}`} state={{ backgroundLocation: location }}>{label}</Link>
 }

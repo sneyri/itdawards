@@ -1,21 +1,22 @@
+import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowDown,
   ArrowRight,
   ArrowUpRight,
-  CheckCircle2,
+  CalendarDays,
   Clock3,
-  MousePointerClick,
+  ListChecks,
   Sparkles,
   Trophy,
+  Vote,
 } from 'lucide-react'
-import { EVENT } from '../data/event'
+import { EVENT, eventDateLabel } from '../data/event'
 import { useVotes } from '../context/VotesContext'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { CategoryRow } from '../components/CategoryRow'
 import { Countdown } from '../components/Countdown'
 import { Reveal } from '../components/Reveal'
-import { pluralize } from '../lib/format'
 
 const featuredIds = [
   'king-itd',
@@ -26,37 +27,49 @@ const featuredIds = [
   'event-goda',
 ]
 
-const steps = [
-  {
-    icon: MousePointerClick,
-    title: 'Выбери',
-    text: 'Открой номинацию и отметь одного номинанта, который запомнился в этом году.',
-    tag: 'номинации',
-  },
-  {
-    icon: CheckCircle2,
-    title: 'Сохрани',
-    text: 'Подтверди свой выбор. Сохранённый голос появится в разделе «Мой голос».',
-    tag: 'один голос',
-  },
-  {
-    icon: Trophy,
-    title: 'Дождись',
-    text: 'Мы объявим первых победителей на церемонии 27 декабря. Ваш голос уже будет учтён.',
-    tag: '27 декабря',
-  },
+const wordmarkLines = [
+  { text: 'ITD', modifier: 'itd' },
+  { text: 'AWARDS', modifier: 'awards' },
+  { text: '2026', modifier: 'year' },
 ]
 
 export function Home() {
   usePageTitle('ITD AWARDS 2026')
-  const { categories, votedCount, isPreview } = useVotes()
-  const votingOpen = categories.some((category) => category.status === 'open')
-  const totalNominees = categories.reduce((sum, category) => sum + category.nominees.length, 0)
-  const featured = categories.filter((categoryItem) =>
+  const { categories, votedCount, voting } = useVotes()
+  const featuredCategories = categories.filter((categoryItem) =>
     featuredIds.includes(categoryItem.id),
   )
-  const featuredCategories = featured.length ? featured : categories.slice(0, 6)
   const tickerItems = [...categories, ...categories]
+  const deadline = eventDateLabel(voting.endsAt)
+  const ceremony = eventDateLabel(EVENT.ceremonyAt)
+  const voteLabel = voting.open
+    ? votedCount > 0 ? 'Продолжить голосование' : 'Отдать голос'
+    : 'Смотреть номинации'
+  const steps = [
+    {
+      icon: ListChecks,
+      date: 'Номинации',
+      title: 'Номинанты собраны',
+      text: 'Сообщество предложило людей, проекты, мемы и события. Первый этап завершён — список сезона зафиксирован.',
+      tag: 'Этап I · завершён',
+    },
+    {
+      icon: Vote,
+      date: deadline ? `До ${deadline}` : 'Голосование',
+      title: 'Выбери своих',
+      text: voting.allowVoteChanges
+        ? 'В каждой номинации — один голос. Выбор можно изменить до конца голосования.'
+        : 'В каждой номинации — один голос.',
+      tag: voting.open ? 'Этап II · сейчас' : 'Этап II',
+    },
+    {
+      icon: Trophy,
+      date: ceremony ?? 'Церемония',
+      title: 'Дождись золота',
+      text: ceremony ? `Объявим первых победителей ${ceremony}.` : 'Объявим победителей на церемонии.',
+      tag: 'Этап III · финал',
+    },
+  ]
 
   return (
     <div className="home">
@@ -83,12 +96,29 @@ export function Home() {
             </p>
 
             <h1 className="hero-wordmark" aria-label="ITD AWARDS 2026">
-              <svg className="award-emblem-filter" width="0" height="0" aria-hidden="true">
-                <filter id="award-emblem-cutout" colorInterpolationFilters="sRGB">
-                  <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  2.1 2.45 .45 0 -.40" />
-                </filter>
-              </svg>
-              <img className="award-emblem" src="/assets/itd-awards-logo.png" alt="" width={640} height={640} fetchPriority="high" />
+              {wordmarkLines.map((line, lineIndex) => {
+                const offset = wordmarkLines
+                  .slice(0, lineIndex)
+                  .reduce((total, item) => total + item.text.length, 0)
+
+                return (
+                  <span
+                    className={`hero-wordmark__line hero-wordmark__line--${line.modifier}`}
+                    aria-hidden="true"
+                    key={line.text}
+                  >
+                    {[...line.text].map((letter, letterIndex) => (
+                      <span
+                        className="hero-wordmark__letter"
+                        style={{ '--letter': offset + letterIndex } as CSSProperties}
+                        key={`${letter}-${letterIndex}`}
+                      >
+                        {letter}
+                      </span>
+                    ))}
+                  </span>
+                )
+              })}
             </h1>
 
             <p className="hero__lead">
@@ -97,29 +127,28 @@ export function Home() {
 
             <div className="hero__actions">
               <Link to="/nominations" className="button button--gold button--lg">
-                {votedCount > 0 ? 'Продолжить голосование' : 'Отдать голос'}
+                {voteLabel}
                 <ArrowUpRight size={18} aria-hidden="true" />
               </Link>
-              <Link to="/results" className="button button--ghost button--lg">
-                Смотреть результаты
-              </Link>
+              <a href="#how" className="button button--ghost button--lg">
+                Как это работает
+              </a>
             </div>
 
-            {votingOpen && !isPreview && <div className="hero__deadline">
+            <div className="hero__deadline">
               <div className="hero__deadline-label">
                 <Clock3 size={18} aria-hidden="true" />
                 <span>
-                  До закрытия голосования
-                  <small>{EVENT.votingEndLabel}</small>
+                  {deadline && voting.open ? 'До закрытия голосования' : 'Голосование'}
+                  <small>{voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'}</small>
                 </span>
               </div>
-              <Countdown target={EVENT.votingEndsAt} />
-            </div>}
+              {voting.open && voting.endsAt && deadline && <Countdown target={voting.endsAt} />}
+            </div>
           </div>
 
           <div className="hero__bottom">
             <span>{categories.length} номинаций</span>
-            <span className="hero__bottom-center">Церемония · {EVENT.ceremonyLabel}</span>
             <a href="#nominations">
               Выбрать победителей
               <ArrowDown size={14} aria-hidden="true" />
@@ -142,7 +171,7 @@ export function Home() {
       <section className="section intro">
         <div className="container intro__grid">
           <Reveal>
-            <p className="eyebrow">О премии</p>
+            <p className="eyebrow">Первый сезон</p>
             <h2 className="display display--lg">
               Не просто премия.
               <br />
@@ -161,16 +190,12 @@ export function Home() {
                 <span>номинаций</span>
               </div>
               <div className="stat">
-                <strong>{totalNominees}</strong>
-                <span>{pluralize(totalNominees, 'номинант', 'номинанта', 'номинантов')}</span>
-              </div>
-              <div className="stat">
                 <strong>01</strong>
                 <span>голос в каждой номинации</span>
               </div>
             </div>
-            <Link to="/about" className="link-inline">
-              Как устроена премия
+            <Link to="/questions" className="link-inline">
+              Частые вопросы
               <ArrowRight size={15} aria-hidden="true" />
             </Link>
           </Reveal>
@@ -185,12 +210,6 @@ export function Home() {
               <h2 className="display">Выбери своих</h2>
             </div>
             <div className="section-head__side">
-              {votedCount > 0 && (
-                <span className="progress-note">
-                  <CheckCircle2 size={15} aria-hidden="true" />
-                  {votedCount} из {categories.length} уже выбрано
-                </span>
-              )}
               <Link to="/nominations" className="link-inline">
                 Все {categories.length} номинаций
                 <ArrowUpRight size={15} aria-hidden="true" />
@@ -205,31 +224,22 @@ export function Home() {
               ))}
             </div>
           </Reveal>
-
-          <div className="categories-footer">
-            <p>
-              {votesRemainingMessage(votedCount, categories.length)}
-            </p>
-            <Link to="/nominations" className="button button--cream">
-              Открыть все номинации
-              <ArrowRight size={17} aria-hidden="true" />
-            </Link>
-          </div>
         </div>
       </section>
 
-      <section className="section how">
+      <section className="section how" id="how">
         <div className="container">
           <div className="section-head">
             <div>
-              <p className="eyebrow">Всё просто</p>
+              <p className="eyebrow">Календарь сезона</p>
               <h2 className="display">Три шага до золота</h2>
             </div>
             <p className="section-head__note">
-              Голос сохраняется на сервере и отображается в разделе «Мой голос».
+              <CalendarDays size={14} aria-hidden="true" />
+              От предложений сообщества до первых имён. Без регистрации и сложных форм.
             </p>
           </div>
-          <div className="steps">
+          <div className="steps steps--calendar">
             {steps.map((step, index) => {
               const Icon = step.icon
               return (
@@ -237,6 +247,10 @@ export function Home() {
                   <article className="step">
                     <span className="step__number" aria-hidden="true">
                       0{index + 1}
+                    </span>
+                    <span className="step__date">
+                      <CalendarDays size={12} aria-hidden="true" />
+                      {step.date}
                     </span>
                     <span className="step__icon" aria-hidden="true">
                       <Icon size={22} strokeWidth={1.7} />
@@ -259,15 +273,18 @@ export function Home() {
               <div className="stage-banner__copy">
                 <p className="eyebrow eyebrow--dark">Этап II · Голосование</p>
                 <h2>
-                  Номинанты собраны. <em>Слово за вами.</em>
+                  Номинанты собраны. <em>Вопросы?</em>
                 </h2>
                 <p>
-                  {isPreview
-                    ? 'В тестовом каталоге собраны предложения из Telegram-бота. Можно отдать один голос в каждой открытой номинации.'
-                    : 'Можно отдать один голос в каждой открытой номинации.'}
+                  Первый этап завершён: сообщество предложило номинантов и
+                  номинации. В каждой категории — один голос за того, кто
+                  запомнился больше всех.
                 </p>
                 <div className="stage-banner__pills">
-                  {isPreview && <span className="stage-banner__pill">Тестовый каталог</span>}
+                  <span className="stage-banner__pill">Приём заявок завершён</span>
+                  {voting.open && <span className="stage-banner__pill">
+                    {deadline ? `Голосование до ${deadline}` : 'Голосование открыто'}
+                  </span>}
                   <span className="stage-banner__pill">Один голос в номинации</span>
                 </div>
                 <Link to="/nominations" className="button button--dark">
@@ -294,15 +311,17 @@ export function Home() {
               Твой голос — это <em>громко</em>.
             </h2>
             <p className="final-cta__copy">
-              Открой список номинаций, чтобы увидеть участников и статус голосования.
+              {voting.open
+                ? deadline ? `Голосование открыто до ${deadline}. Выбери победителей в каждой номинации.` : 'Выбери победителей в каждой номинации.'
+                : 'Итоги появятся в карточках номинаций после публикации.'}
             </p>
             <div className="final-cta__actions">
               <Link to="/nominations" className="button button--dark button--lg">
-                {votedCount > 0 ? 'Продолжить голосование' : 'Отдать голос'}
+                {voteLabel}
                 <ArrowUpRight size={18} aria-hidden="true" />
               </Link>
-              <Link to="/about" className="final-cta__link">
-                Правила голосования
+              <Link to="/questions" className="final-cta__link">
+                Вопросы и ответы
                 <ArrowRight size={15} aria-hidden="true" />
               </Link>
             </div>
@@ -314,10 +333,4 @@ export function Home() {
       </section>
     </div>
   )
-}
-
-function votesRemainingMessage(votedCount: number, total: number): string {
-  if (votedCount === 0) return 'Начните с любой номинации — прогресс сохранится автоматически.'
-  if (votedCount === total) return 'Все голоса собраны. Теперь остаётся дождаться церемонии.'
-  return `Вы уже прошли ${votedCount} из ${total}. Продолжите, когда будет минутка.`
 }

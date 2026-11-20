@@ -1,0 +1,8 @@
+{
+  "name": "itd-awards",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=server/.env --env-file-if-exists=.env start.js"
+  }
+}

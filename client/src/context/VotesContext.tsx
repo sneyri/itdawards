@@ -6,24 +6,32 @@ import { ApiError, fetchCatalogue, submitVote } from '../lib/awardsApi'
 type AwardsState = Awaited<ReturnType<typeof fetchCatalogue>>
 type VotesContextValue = AwardsState & {
   votedCount: number
-  isPreview: boolean
   saveVote: (category: Category, nomineeId: string) => Promise<void>
+  refreshCatalogue: () => Promise<void>
 }
 
 const VotesContext = createContext<VotesContextValue | null>(null)
 
 export function VotesProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AwardsState>()
-  const [failed, setFailed] = useState(false)
+  const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
-    fetchCatalogue(controller.signal).then(setData, () => {
-      if (!controller.signal.aborted) setFailed(true)
+    fetchCatalogue(controller.signal).then(setData, (reason: unknown) => {
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Попробуйте ещё раз.')
     })
     return () => controller.abort()
   }, [attempt])
+
+  async function refreshCatalogue() {
+    try {
+      setData(await fetchCatalogue())
+    } catch {
+      // Keep the last catalogue visible if the refresh fails.
+    }
+  }
 
   async function saveVote(category: Category, nomineeId: string) {
     try {
@@ -31,15 +39,11 @@ export function VotesProvider({ children }: { children: ReactNode }) {
       setData((current) => current && ({
         ...current,
         votes: { ...current.votes, [category.id]: String(saved.nominee_id) },
+        voteNames: { ...current.voteNames, [category.id]: category.nominees.find((nominee) => nominee.id === nomineeId)?.name ?? '' },
       }))
     } catch (error) {
-      if (error instanceof ApiError && ['already_voted', 'voting_unavailable', 'nominee_not_found', 'nominee_mismatch', 'login_required', 'auth_unavailable'].includes(error.code ?? '')) {
-        // The status or ballot can change while the page is open.
-        try {
-          setData(await fetchCatalogue())
-        } catch {
-          // Keep the original vote error if the catalogue is also unavailable.
-        }
+      if (error instanceof ApiError && [401, 403, 404, 409].includes(error.status)) {
+        await refreshCatalogue()
       }
       throw error
     }
@@ -48,15 +52,18 @@ export function VotesProvider({ children }: { children: ReactNode }) {
   if (!data) {
     return (
       <main className="container section">
-        <div className="empty-state" role={failed ? 'alert' : 'status'}>
-          <h1>{failed ? 'Не удалось загрузить номинации' : 'Загружаем номинации…'}</h1>
-          {failed && (
-            <button type="button" className="button button--gold" onClick={() => {
-              setFailed(false)
-              setAttempt(attempt + 1)
-            }}>
-              Повторить
-            </button>
+        <div className="empty-state" role={error ? 'alert' : 'status'}>
+          <h1>{error ? 'Не удалось загрузить номинации' : 'Загружаем номинации…'}</h1>
+          {error && (
+            <>
+              <p>{error}</p>
+              <button type="button" className="button button--gold" onClick={() => {
+                setError('')
+                setAttempt(attempt + 1)
+              }}>
+                Повторить
+              </button>
+            </>
           )}
         </div>
       </main>
@@ -67,8 +74,8 @@ export function VotesProvider({ children }: { children: ReactNode }) {
     <VotesContext.Provider value={{
       ...data,
       votedCount: Object.keys(data.votes).length,
-      isPreview: data.categories.some((category) => category.suggestionsPreview),
       saveVote,
+      refreshCatalogue,
     }}>
       {children}
     </VotesContext.Provider>

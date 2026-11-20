@@ -4,3 +4,11 @@ node_modules/
 !.env.example
 /client/dist/
 *.log
+__pycache__/
+*.py[cod]
+/bot/.venv/
+/bot/*.db*
+/bot/*.sqlite*
+/bot/backups/
+/bot/logs/
+/bot/deploy/

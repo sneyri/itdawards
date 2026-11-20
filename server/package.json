@@ -4,21 +4,21 @@
   "description": "",
   "main": "server.js",
   "dependencies": {
-    "altcha-lib": "^2.8.0",
     "cors": "^2.8.6",
     "express": "^5.3.0",
     "express-rate-limit": "^8.7.4",
     "helmet": "^8.3.0",
-    "nodemailer": "^10.5.0",
     "pg": "^8.23.1"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env server.js",
-    "start:auth": "node --env-file-if-exists=.env auth-service/index.js",
-    "dev": "nodemon --exec \"node --env-file-if-exists=.env\" server.js",
-    "db:init": "node --env-file-if-exists=.env database/db_init.js",
-    "db:bot-preview": "node --env-file-if-exists=.env database/import_bot_preview.js",
-    "start:bot-preview": "node --env-file-if-exists=.env server.js --bot-preview"
+    "start": "node --env-file-if-exists=.env --env-file-if-exists=../.env server.js",
+    "dev": "nodemon --exec \"node --env-file-if-exists=.env --env-file-if-exists=../.env\" server.js",
+    "db:init": "node --env-file-if-exists=.env --env-file-if-exists=../.env database/db_init.js",
+    "admin:bootstrap": "node --env-file-if-exists=.env --env-file-if-exists=../.env database/bootstrap_admin.js",
+    "test": "node --test",
+    "db:bot-preview": "node --env-file-if-exists=.env --env-file-if-exists=../.env database/import_bot_preview.js",
+    "start:bot-preview": "node --env-file-if-exists=.env --env-file-if-exists=../.env server.js --bot-preview",
+    "db:sync-nominees": "node --env-file-if-exists=.env --env-file-if-exists=../.env database/sync_nominees.js"
   },
   "keywords": [],
   "author": "",

@@ -1,47 +1,44 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { usePageTitle } from '../hooks/usePageTitle'
-import './signIn.css'
-
-async function authRequest(path: string, payload: Record<string, string>) {
-  const response = await fetch(`/auth/${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const body = await response.json().catch(() => null)
-  if (!response.ok || !body?.data) {
-    const message = body?.error?.message ?? 'Вход в ITD Awards сейчас недоступен. Попробуйте позже.'
-    throw new Error(message)
-  }
-}
+import { ArrowUpRight, Check, Send, X } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useVotes } from '../context/VotesContext'
+import { signIn } from '../lib/awardsApi'
 
 function safeReturnPath(value: string | null) {
   if (!value || !/^\/(?![/\\])[^\\\r\n]*$/.test(value)) return '/nominations'
   const url = new URL(value, window.location.origin)
-  return /^\/(?:nominations(?:\/[a-z0-9-]+)?\/?|my-votes\/?|results\/?|about\/?|ceremony\/?)?$/.test(url.pathname)
+  return /^\/(?:nominations(?:\/[a-z0-9-]+)?\/?|my-votes\/?|about\/?|questions\/?|admin\/?)?$/.test(url.pathname)
     ? url.pathname + url.search + url.hash
     : '/nominations'
 }
 
-export function SignIn() {
-  usePageTitle('Вход в ITD Awards')
+export function SignIn({ modal = false }: { modal?: boolean }) {
+  const { auth } = useVotes()
   const [params] = useSearchParams()
-  const [legacy, setLegacy] = useState(false)
-  const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
+  const navigate = useNavigate()
+  const returnPath = safeReturnPath(params.get('return_to'))
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const [code, setCode] = useState('')
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  function resetCode() {
-    setSent(false)
-    setCode('')
-    setError('')
-  }
+  useEffect(() => {
+    if (!modal) {
+      document.title = 'Вход · ITD AWARDS 2026'
+      return
+    }
+    const dialog = dialogRef.current
+    dialog?.showModal()
+    inputRef.current?.focus({ preventScroll: true })
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      dialog?.close()
+      document.body.style.overflow = previousOverflow
+    }
+  }, [modal])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -49,60 +46,89 @@ export function SignIn() {
     setError('')
     setBusy(true)
     try {
-      if (!legacy && !sent) {
-        await authRequest('email/request', { email })
-        setSent(true)
-      } else {
-        if (legacy) await authRequest('sign-in', { username, password })
-        else await authRequest('email/verify', { email, code })
-        window.location.assign(safeReturnPath(params.get('return_to')))
-      }
+      await signIn(code.trim())
+      window.location.replace(returnPath)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Что-то пошло не так. Попробуйте ещё раз.')
-    } finally {
+      setError(reason instanceof Error ? reason.message : 'Не удалось войти. Попробуйте ещё раз.')
       setBusy(false)
     }
   }
 
-  return (
-    <section className="sign-in container section">
-      <h1 className="display">Вход в ITD Awards</h1>
-      <div className="sign-in__panel">
-        <form className="sign-in__form" onSubmit={submit}>
-          {legacy ? <>
-            <label>Ник
-              <input name="username" autoComplete="username" autoCapitalize="none" spellCheck={false}
-                maxLength={33} required value={username} onChange={(event) => setUsername(event.target.value)} disabled={busy} />
-            </label>
-            <label>Пароль
-              <input type="password" name="password" autoComplete="current-password" maxLength={256}
-                required value={password} onChange={(event) => setPassword(event.target.value)} disabled={busy} />
-            </label>
-          </> : sent ? <>
-            <p role="status">Отправили письмо на <strong>{email}</strong>.</p>
-            <label>Код из письма
-              <input name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{8}"
-                maxLength={8} required value={code} onChange={(event) => setCode(event.target.value)} disabled={busy} />
-            </label>
-          </> : <label>Email
-            <input type="email" name="email" autoComplete="email" autoCapitalize="none" spellCheck={false}
-              maxLength={254} required value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} />
-          </label>}
-          {error && <p className="sign-in__error" role="alert">{error}</p>}
-          <button className="button button--gold" type="submit" disabled={busy}>
-            {busy ? 'Подождите…' : legacy || sent ? 'Войти' : 'Получить код'}
-          </button>
-          {sent && <button type="button" className="text-button" disabled={busy} onClick={resetCode}>
-            Запросить новый код или изменить email
-          </button>}
-          <button type="button" className="text-button" disabled={busy} onClick={() => {
-            setLegacy(!legacy)
-            setPassword('')
-            resetCode()
-          }}>{legacy ? 'Войти по email' : 'У меня уже есть ник и пароль'}</button>
-        </form>
+  function close() {
+    if (!busy) navigate(-1)
+  }
+
+  const form = (
+    <div className="ticket-modal__dialog">
+      {modal && (
+        <button type="button" className="ticket-modal__close" aria-label="Закрыть окно входа"
+          onClick={close} disabled={busy}>
+          <X size={17} aria-hidden="true" />
+        </button>
+      )}
+      <p className="eyebrow">Вход в ITD Awards</p>
+      <h2 id="ticket-title">Билет участника</h2>
+      {auth.user ? (
+        <>
+          <p className="ticket-modal__lead">Вы вошли как <strong>{auth.user.displayName || 'участник'}</strong>.</p>
+          {returnPath.startsWith('/admin') ? (
+            <a className="button button--gold ticket-modal__submit" href={returnPath}>Продолжить</a>
+          ) : (
+            <Link className="button button--gold ticket-modal__submit" to={returnPath} replace>Продолжить</Link>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="ticket-modal__lead">Получите одноразовый код у бота и введите его, чтобы войти.</p>
+          <div className="ticket-modal__ticket" aria-hidden="true">
+            <span className="ticket-modal__ticket-top">ITD AWARDS · 2026</span>
+            <strong className="ticket-modal__ticket-number">Код участника</strong>
+            <span className="ticket-modal__ticket-bottom"><span>Один голос</span><span>Сезон 2026</span></span>
+          </div>
+          {auth.botUrl && (
+            <a className="ticket-modal__bot" href={auth.botUrl} target="_blank" rel="noreferrer">
+              <span className="ticket-modal__bot-icon" aria-hidden="true"><Send size={17} /></span>
+              <span className="ticket-modal__bot-text">
+                <strong>Открыть Telegram-бота</strong>
+                <small>Нажмите «Запустить» или отправьте /login</small>
+              </span>
+              <ArrowUpRight size={16} aria-hidden="true" />
+            </a>
+          )}
+          <form className="ticket-modal__form" onSubmit={submit}>
+            <label htmlFor="telegram-code">Код из Telegram</label>
+            <input id="telegram-code" name="code" ref={inputRef} className="ticket-modal__input"
+              value={code} onChange={(event) => { setCode(event.target.value); setError('') }}
+              autoComplete="one-time-code" autoCapitalize="characters" spellCheck={false}
+              placeholder="XXXX-XXXX-XXXX" aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'ticket-error' : undefined} required disabled={busy} maxLength={40} />
+            {error && <p id="ticket-error" className="ticket-modal__error" role="alert">{error}</p>}
+            <button type="submit" className="button button--gold ticket-modal__submit" disabled={busy || !code.trim()}>
+              {busy ? 'Проверяем код…' : 'Войти'}
+              <Check size={16} aria-hidden="true" />
+            </button>
+          </form>
+          <p className="ticket-modal__note">Код действует пять минут. Если он истёк, запросите новый через /newcode.</p>
+          <p className="ticket-modal__note">
+            <a className="link-inline" href={returnPath.startsWith('/admin') ? '/account?return_to=%2Fadmin' : '/account#invite'}>
+              Вход по приглашению или с паролем
+            </a>
+          </p>
+        </>
+      )}
+    </div>
+  )
+
+  return modal ? (
+    <dialog ref={dialogRef} className="telegram-dialog" aria-labelledby="ticket-title" onCancel={(event) => {
+      event.preventDefault()
+      close()
+    }}>
+      <div className="ticket-modal" onClick={(event) => { if (event.target === event.currentTarget) close() }}>
+        {form}
       </div>
-      <Link to="/nominations" className="link-inline">К номинациям</Link>
-    </section>
+    </dialog>
+  ) : (
+    <section className="section container telegram-login" aria-labelledby="ticket-title">{form}</section>
   )
 }

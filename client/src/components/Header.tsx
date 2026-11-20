@@ -1,25 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { ArrowUpRight, Menu, Vote, X } from 'lucide-react'
-import { EVENT } from '../data/event'
+import { eventDateLabel } from '../data/event'
 import { useVotes } from '../context/VotesContext'
 import { Logo } from './Logo'
-import { ProgressRing } from './ProgressRing'
-import { AuthAction } from './AuthAction'
 
-const navItems = [
+const publicNavItems = [
   { to: '/nominations', label: 'Номинации' },
-  { to: '/results', label: 'Результаты' },
-  { to: '/about', label: 'О премии' },
-  { to: '/ceremony', label: 'Церемония' },
+  { to: '/my-votes', label: 'Мой голос' },
+  { to: '/questions', label: 'Вопросы' },
 ]
 
 export function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const location = useLocation()
-  const { categories, votedCount, isPreview, auth } = useVotes()
-  const votingOpen = categories.some((category) => category.status === 'open')
+  const { auth, voting } = useVotes()
+  const role = auth.user?.role
+  const navItems = role === 'SUPERADMIN' || role === 'MANAGER'
+    ? [...publicNavItems, { to: '/admin', label: 'Админка' }]
+    : publicNavItems
+  const votingOpen = voting.open
+  const deadline = eventDateLabel(voting.endsAt)
   const menuRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -79,12 +81,12 @@ export function Header() {
         <div className="container status-bar__inner">
           <span className="status-bar__main">
             {votingOpen && <span className="status-dot" aria-hidden="true" />}
-            {votingOpen ? (isPreview ? 'Тестовое голосование' : 'Голосование открыто') : 'Голосование сейчас недоступно'}
+            {votingOpen ? 'Голосование открыто' : 'Голосование сейчас закрыто'}
           </span>
           <span className="status-bar__details">
-            {votingOpen && !isPreview && <span className="status-bar__date">до {EVENT.votingEndLabel}</span>}
-            <Link to="/about" className="status-bar__link">
-              Правила
+            {votingOpen && deadline && <span className="status-bar__date">до {deadline}</span>}
+            <Link to="/questions" className="status-bar__link">
+              Вопросы
               <ArrowUpRight size={12} aria-hidden="true" />
             </Link>
           </span>
@@ -96,7 +98,9 @@ export function Header() {
           <Logo compact />
 
           <nav className="header__nav" aria-label="Основная навигация">
-            {navItems.map((item) => (
+            {navItems.map((item) => item.to === '/admin' ? (
+              <a key={item.to} href={item.to}>{item.label}</a>
+            ) : (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -108,22 +112,10 @@ export function Header() {
           </nav>
 
           <div className="header__actions">
-            <Link
-              to="/my-votes"
-              className="progress-chip"
-              aria-label={`Мой голос: заполнено ${votedCount} из ${categories.length} номинаций`}
-            >
-              <ProgressRing value={votedCount} total={categories.length} size={25} stroke={9} />
-              <span>
-                {votedCount}/{categories.length}
-              </span>
-            </Link>
-
-            {auth.mode === 'account' ? <AuthAction className="button button--gold button--sm header__cta" /> :
             <Link to="/nominations" className="button button--gold button--sm header__cta">
               <Vote size={16} aria-hidden="true" />
               Голосовать
-            </Link>}
+            </Link>
 
             <button
               type="button"
@@ -168,10 +160,15 @@ export function Header() {
                 </button>
               </div>
               <h2 className="sr-only" id="mobile-menu-title">
-                Навигация по премии
+                Навигация по сайту
               </h2>
               <nav className="mobile-menu__nav" aria-label="Мобильная навигация">
-                {navItems.map((item, index) => (
+                {navItems.map((item, index) => item.to === '/admin' ? (
+                  <a key={item.to} href={item.to} className="mobile-menu__link" onClick={() => setMenuOpen(false)}>
+                    <span>{item.label}</span>
+                    <ArrowUpRight size={20} aria-hidden="true" />
+                  </a>
+                ) : (
                   <NavLink
                     key={item.to}
                     to={item.to}
@@ -190,32 +187,14 @@ export function Header() {
               </nav>
               <div className="mobile-menu__foot">
                 <Link
-                  to="/my-votes"
-                  className="mobile-menu__progress"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <ProgressRing value={votedCount} total={categories.length} size={48} stroke={5}>
-                    <strong>{votedCount}</strong>
-                  </ProgressRing>
-                  <span>
-                    <strong>Мой голос</strong>
-                    <span>
-                      {votedCount} из {categories.length} номинаций
-                    </span>
-                  </span>
-                  <ArrowUpRight size={18} aria-hidden="true" />
-                </Link>
-                {auth.mode === 'account' ? <AuthAction className="button button--gold mobile-menu__cta" /> : <Link
                   to="/nominations"
                   className="button button--gold mobile-menu__cta"
                   onClick={() => setMenuOpen(false)}
                 >
                   Выбрать победителей
                   <ArrowUpRight size={17} aria-hidden="true" />
-                </Link>}
-                <p className="mobile-menu__deadline">
-                  {isPreview ? 'Тестовое голосование' : `Голосование до ${EVENT.votingEndLabel}`}
-                </p>
+                </Link>
+                {votingOpen && deadline && <p className="mobile-menu__deadline">Голосование до {deadline}</p>}
               </div>
             </div>
           </>

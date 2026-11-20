@@ -1,9 +1,18 @@
 export const EVENT = {
-  votingStartedAt: '2026-11-14T00:00:00+03:00',
-  votingEndsAt: '2026-12-20T23:59:00+03:00',
-  ceremonyAt: '2026-12-27T19:00:00+03:00',
-  votingEndLabel: '20 декабря, 23:59 MSK',
-  ceremonyLabel: '27 декабря 2026',
+  ceremonyAt: import.meta.env.VITE_CEREMONY_AT as string | undefined,
   edition: 'VOL. 01',
   year: 2026,
+}
+
+const dateTime = new Intl.DateTimeFormat('ru-RU', {
+  timeZone: 'Europe/Moscow',
+  day: 'numeric',
+  month: 'long',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+export function eventDateLabel(value: string | null | undefined): string | null {
+  const date = value ? new Date(value) : null
+  return date && Number.isFinite(date.valueOf()) ? `${dateTime.format(date)} МСК` : null
 }

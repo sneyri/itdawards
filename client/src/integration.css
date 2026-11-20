@@ -1,20 +1,5 @@
-.award-emblem-filter {
-  position: absolute;
-}
-
-.hero-wordmark .award-emblem {
-  display: block;
-  width: clamp(230px, 36vw, 410px);
-  height: auto;
-  margin: -8% auto;
-  filter: url(#award-emblem-cutout) drop-shadow(0 0 20px #cf93405c);
-}
-
-.nominee__avatar img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+.category-image {
+  border-radius: 4px;
   object-fit: cover;
 }
 
@@ -22,49 +7,121 @@
   overflow-wrap: anywhere;
 }
 
-.category-list,
-.nominee-list {
-  gap: 14px;
+.nominee__handle {
+  color: var(--gold);
 }
 
-.category-list {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+.telegram-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  border: 0;
+  margin: 0;
+  background: transparent;
+  color: inherit;
 }
 
-.category-row {
-  min-height: 108px;
+.telegram-dialog::backdrop {
+  background: transparent;
 }
 
-.nominee {
-  position: relative;
+.telegram-login .ticket-modal__dialog {
+  max-height: none;
+  margin-inline: auto;
+}
+
+.result-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--ink-2);
+}
+
+.result-card__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.result-card__icon,
+.result-row__rank {
+  flex: none;
+  color: var(--gold-bright);
+}
+
+.result-card__title-wrap p {
+  color: var(--muted-strong);
+  font-size: 14px;
+}
+
+.result-list {
+  display: grid;
+  gap: 10px;
+}
+
+.result-row {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  align-items: center;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.result-row.is-picked {
+  background: rgba(205, 181, 124, 0.09);
+}
+
+.result-row__label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.result-row__name {
+  overflow-wrap: anywhere;
+}
+
+.result-row__percent,
+.result-row__pick {
+  font-size: 13px;
+}
+
+.result-row__percent {
+  flex: none;
+  color: var(--gold-bright);
+}
+
+.result-row__pick {
+  margin-left: 6px;
+}
+
+.result-bar {
+  height: 4px;
+  margin-top: 5px;
   overflow: hidden;
-  box-shadow: 0 4px 0 #11100d, 0 9px 20px #0003;
+  border-radius: 4px;
+  background: var(--line);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .hero-wordmark .award-emblem {
-    animation: reveal-award-emblem 1.65s cubic-bezier(.2, .65, .25, 1) both;
-  }
-
-  .category-row[data-tilting],
-  .nominee[data-tilting] {
-    z-index: 1;
-    transform: perspective(800px) translateY(-5px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y)) scale(1.025);
-  }
-
-  .category-row[data-tilting]::after,
-  .nominee[data-tilting]::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse at var(--shine-x) var(--shine-y), #ffe7ac55, transparent 65%);
-    transform: none;
-    pointer-events: none;
-  }
+.result-bar span {
+  display: block;
+  height: 100%;
+  background: var(--gold);
 }
 
-@keyframes reveal-award-emblem {
-  0% { opacity: 0; clip-path: inset(50% 0); transform: perspective(700px) rotateX(30deg) scale(.88); }
-  36% { opacity: 1; clip-path: inset(26% 0); }
-  100% { opacity: 1; clip-path: inset(-8%); transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .hero__eyebrow,
+  .hero-wordmark,
+  .hero-wordmark__letter,
+  .hero__lead,
+  .hero__actions,
+  .hero__deadline {
+    animation: none;
+  }
 }

@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, SearchX } from 'lucide-react'
 import { PageHero } from '../components/PageHero'
-import { ProgressCard } from '../components/ProgressCard'
 import { SearchField } from '../components/SearchField'
 import { CategoryRow } from '../components/CategoryRow'
 import { useVotes } from '../context/VotesContext'
@@ -18,7 +17,7 @@ const filterLabels: Record<Filter, string> = {
 
 export function Nominations() {
   usePageTitle('Номинации')
-  const { categories, votes, votedCount, isPreview } = useVotes()
+  const { categories, votes, voting } = useVotes()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
 
@@ -49,6 +48,7 @@ export function Nominations() {
         categoryItem.description,
         ...categoryItem.nominees.flatMap((nomineeItem) => [
           nomineeItem.name,
+          nomineeItem.handle,
           nomineeItem.tagline,
         ]),
       ]
@@ -77,11 +77,8 @@ export function Nominations() {
             <em>Выбери своих.</em>
           </>
         }
-        description={isPreview
-          ? 'Тестовое голосование по предложениям из Telegram-бота. Один голос в каждой открытой номинации.'
-          : 'Голосуй за людей, проекты и мемы, которые сделали этот год. Один голос в каждой открытой номинации.'}
+        description={`Голосуй за людей, проекты и мемы, которые сделали этот год. В каждой номинации — один голос.${voting.allowVoteChanges ? ' Выбор можно изменить до конца голосования.' : ''}`}
         ghost={String(categories.length)}
-        aside={<ProgressCard value={votedCount} total={categories.length} />}
       />
 
       <section className="section nominations-section">
@@ -129,13 +126,15 @@ export function Nominations() {
               <span className="empty-state__icon" aria-hidden="true">
                 <SearchX size={26} />
               </span>
-              <h2>Здесь пока пусто</h2>
-              <p>
-                Попробуйте другой запрос или сбросьте фильтры — все номинации на месте.
-              </p>
-              <button type="button" className="button button--cream" onClick={resetFilters}>
-                Показать все номинации
-              </button>
+              <h2>{categories.length ? 'Здесь пока пусто' : 'Номинации пока не добавлены'}</h2>
+              {hasActiveFilters && (
+                <>
+                  <p>Попробуйте другой запрос или сбросьте фильтры — все номинации на месте.</p>
+                  <button type="button" className="button button--cream" onClick={resetFilters}>
+                    Показать все номинации
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -148,11 +147,11 @@ export function Nominations() {
                 <h2>Не знаете, с чего начать?</h2>
                 <p>
                   Откройте номинацию, прочитайте карточки номинантов и выберите того,
-                  кто отозвался.
+                  кто отозвался. Голос можно менять до конца голосования.
                 </p>
               </div>
             </div>
-            <Link to="/about" className="link-inline">
+            <Link to="/questions" className="link-inline">
               Как это работает
               <ArrowRight size={15} aria-hidden="true" />
             </Link>
