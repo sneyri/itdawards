@@ -24,56 +24,143 @@ function cover(item, small = false) {
     return result;
 }
 
-function availability(row) {
-    if (row.archived) return status('В архиве');
-    return status(nominationStatuses[row.status], row.status === 'open' ? 'ok' : '');
+const imageMedia = {
+    name: 'image_file', types: ['image/png', 'image/jpeg', 'image/webp'], limit: 5 * 1024 * 1024,
+    endpoint: '/admin/uploads/images', urlKey: 'image_url', label: 'Фотография',
+    action: 'Перетащите фотографию сюда',
+    hint: 'или нажмите, чтобы выбрать файл · PNG, JPEG, WebP до 5 МБ',
+    typeError: 'Нужен PNG, JPEG или WebP.', sizeError: 'Файл больше 5 МБ.',
+    dropError: 'Перетащите файл PNG, JPEG или WebP.',
+    currentCaption: 'Текущее фото', previewIcon: '',
+};
+
+const audioMedia = {
+    name: 'audio_file', types: ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/webm'],
+    limit: 20 * 1024 * 1024, endpoint: '/admin/uploads/audio', urlKey: 'audio_url', label: 'Аудиофайл',
+    action: 'Перетащите трек сюда',
+    hint: 'или нажмите, чтобы выбрать файл · MP3, M4A, WAV, OGG, WebM до 20 МБ',
+    typeError: 'Нужен MP3, M4A, WAV, OGG или WebM.', sizeError: 'Файл больше 20 МБ.',
+    dropError: 'Перетащите аудиофайл.',
+    currentCaption: 'Текущий трек', previewIcon: '♫',
+};
+
+let uploadHintId = 0;
+
+function safeMedia(value) {
+    if (!value) return null;
+    if (/^\/(?:assets|images|audio)\//.test(value) && !value.includes('\\')) return value;
+    if (/^\/api\/(?:media|audio)\/[a-f0-9]{64}$/.test(value)) return value;
+    try {
+        const address = new URL(value);
+        return address.protocol === 'https:' && !address.username && !address.password ? address.href : null;
+    } catch {
+        return null;
+    }
 }
 
-function fileDropField(label, name, accept, types, maxBytes, maxLabel) {
-    const input = el('input', { class: 'file-drop__input', type: 'file', name, accept, 'aria-label': label });
-    const message = el('span', { class: 'file-drop__message', 'aria-live': 'polite' }, 'Файл не выбран');
-    const zone = el('span', { class: 'file-drop' },
-        el('span', { class: 'file-drop__prompt' }, 'Перетащите файл сюда или нажмите, чтобы выбрать'),
-        input, message);
-    const field = el('label', { class: 'field' }, label, zone);
+function mediaDropField(urlInput, currentUrl, config) {
+    const hintId = 'upload-hint-' + ++uploadHintId;
+    const error = el('p', { class: 'upload-drop__error', role: 'alert' });
+    const preview = el('div', { class: 'upload-drop__preview', hidden: true });
+    const input = el('input', {
+        type: 'file', name: config.name, accept: config.types.join(','),
+        class: 'upload-drop__input', 'aria-label': config.label, 'aria-describedby': hintId,
+    });
+    let file = null;
+    let objectUrl = null;
 
-    function choose(file) {
-        if (!file) return;
-        if (!types.includes(file.type)) {
-            input.value = '';
-            message.textContent = 'Неподдерживаемый формат файла.';
-            message.classList.add('is-error');
-            return;
-        }
-        if (file.size < 1 || file.size > maxBytes) {
-            input.value = '';
-            message.textContent = `Размер файла должен быть от 1 байта до ${maxLabel}.`;
-            message.classList.add('is-error');
-            return;
-        }
-        message.textContent = `${file.name} · ${(file.size / (1024 * 1024)).toFixed(2)} МиБ`;
-        message.classList.remove('is-error');
+    function clearSelection() {
+        file = null;
+        input.value = '';
+        preview.hidden = true;
+        preview.replaceChildren();
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
     }
 
-    input.addEventListener('change', () => choose(input.files?.[0]));
+    function showPreview(src, caption, detail) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        objectUrl = src.startsWith('blob:') ? src : null;
+        const visual = config.previewIcon
+            ? el('span', { class: 'upload-drop__icon', 'aria-hidden': 'true' }, config.previewIcon)
+            : el('img', { src, alt: '' });
+        const remove = button('Убрать', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            clearSelection();
+            urlInput.value = '';
+            error.textContent = '';
+        }, 'subtle compact', { type: 'button' });
+        preview.replaceChildren(visual,
+            el('span', {}, el('strong', {}, caption), el('small', {}, detail)), remove);
+        preview.hidden = false;
+    }
+
+    function setFile(next) {
+        error.textContent = '';
+        if (!next) return;
+        if (!config.types.includes(next.type)) {
+            clearSelection();
+            error.textContent = config.typeError;
+            return;
+        }
+        if (next.size > config.limit) {
+            clearSelection();
+            error.textContent = config.sizeError;
+            return;
+        }
+        file = next;
+        showPreview(URL.createObjectURL(next), next.name, Math.max(1, Math.round(next.size / 1024)) + ' КБ');
+    }
+
+    input.addEventListener('change', () => {
+        if (input.files?.length) setFile(input.files[0]);
+    });
+    const zone = el('label', { class: 'upload-drop' },
+        input,
+        el('span', { class: 'upload-drop__icon', 'aria-hidden': 'true' }, '＋'),
+        el('span', { class: 'upload-drop__title' }, config.action),
+        el('span', { class: 'upload-drop__hint', id: hintId }, config.hint),
+        preview);
+    zone.addEventListener('dragenter', event => { event.preventDefault(); zone.classList.add('is-over'); });
     zone.addEventListener('dragover', event => {
         event.preventDefault();
-        zone.classList.add('is-dragging');
+        event.dataTransfer.dropEffect = 'copy';
+        zone.classList.add('is-over');
     });
     zone.addEventListener('dragleave', event => {
-        if (!zone.contains(event.relatedTarget)) zone.classList.remove('is-dragging');
+        if (!zone.contains(event.relatedTarget)) zone.classList.remove('is-over');
     });
     zone.addEventListener('drop', event => {
         event.preventDefault();
-        zone.classList.remove('is-dragging');
-        const file = event.dataTransfer?.files[0];
-        if (!file) return;
-        const transfer = new DataTransfer();
-        transfer.items.add(file);
-        input.files = transfer.files;
-        choose(file);
+        zone.classList.remove('is-over');
+        const dropped = [...(event.dataTransfer?.files ?? [])];
+        const next = dropped.find(item => config.types.includes(item.type)) ?? dropped[0];
+        if (next) setFile(next);
+        else {
+            clearSelection();
+            error.textContent = config.dropError;
+        }
     });
-    return field;
+    const current = safeMedia(currentUrl);
+    if (current) showPreview(current, config.currentCaption, 'Перетащите новое или уберите это');
+    return {
+        field: el('div', { class: 'field upload-field' },
+            el('span', { class: 'field-label' }, config.label), zone, error),
+        getFile: () => file,
+        upload: async () => {
+            if (!file) return null;
+            if (!config.types.includes(file.type)) throw new Error(config.typeError);
+            if (file.size > config.limit) throw new Error(config.sizeError);
+            const uploaded = await request(config.endpoint, { method: 'POST', file });
+            return uploaded[config.urlKey];
+        },
+    };
+}
+
+function availability(row) {
+    if (row.archived) return status('В архиве');
+    return status(nominationStatuses[row.status], row.status === 'open' ? 'ok' : '');
 }
 
 export async function loadCatalog(_operator, signal, { nominationId, nomineeId } = {}) {
@@ -258,6 +345,10 @@ export async function loadCatalog(_operator, signal, { nominationId, nomineeId }
         const siblings = nominee ? (rows.find(row => row.id === parent)?.nominees ?? []) : rows;
         const lastOrder = Math.max(0, ...siblings.map(row => row.sort_order));
         const validNominations = rows.filter(row => !row.archived || row.id === parent);
+        const imageUrlField = textField('Адрес изображения', 'image_url', item?.image_url ?? '', { maxlength: 2048, placeholder: 'https://…' });
+        const imageUpload = mediaDropField(imageUrlField.querySelector('input'), item?.image_url, imageMedia);
+        const audioUrlField = textField('Аудио (ссылка)', 'audio_url', item?.audio_url ?? '', { maxlength: 2048 });
+        const audioUpload = nominee ? mediaDropField(audioUrlField.querySelector('input'), item?.audio_url, audioMedia) : null;
         const form = el('form', { class: 'form-stack' },
             textField(nominee ? 'Имя' : 'Название', name, item?.[name] ?? '', { required: true, maxlength: 160 }),
             el('div', { class: 'form-grid' },
@@ -267,49 +358,27 @@ export async function loadCatalog(_operator, signal, { nominationId, nomineeId }
                     { type: 'number', min: -2147483648, max: 2147483647, step: 1, required: true })),
             el('label', { class: 'field' }, 'Описание',
                 el('textarea', { name: 'description', rows: 4, maxlength: 1200 }, item?.description ?? '')),
-            textField('Адрес изображения', 'image_url', item?.image_url ?? '', { maxlength: 2048, placeholder: 'https://…' }),
-            fileDropField('Загрузить изображение', 'image_file', 'image/png,image/jpeg,image/webp',
-                ['image/png', 'image/jpeg', 'image/webp'], 5 * 1024 * 1024, '5 МиБ'),
-            el('p', { class: 'muted' }, 'PNG, JPEG или WebP, до 5 МиБ и 4096 × 4096. Загруженный файл заменит адрес.'),
+            imageUrlField,
+            imageUpload.field,
             nominee ? el('div', { class: 'form-grid' },
                 textField('Никнейм', 'handle', item?.handle ?? '', { maxlength: 100 }),
                 textField('Ссылка на профиль (HTTPS)', 'link_url', item?.link_url ?? '', { maxlength: 2048 }),
                 textField('Название трека', 'song', item?.song ?? '', { maxlength: 200 }),
-                textField('Аудио (HTTPS или /assets/…)', 'audio_url', item?.audio_url ?? '', { maxlength: 2048 }),
-                fileDropField('Загрузить аудио', 'audio_file',
-                    'audio/mpeg,audio/mp4,audio/wav,audio/ogg,audio/webm',
-                    ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/webm'],
-                    20 * 1024 * 1024, '20 МиБ'),
-                el('p', { class: 'muted' }, 'MP3, M4A, WAV, OGG или WebM, до 20 МиБ. Загруженный файл заменит адрес.'),
+                audioUrlField,
                 textField('Описание изображения', 'image_alt', item?.image_alt ?? '', { maxlength: 300 })) : null,
+            audioUpload ? audioUpload.field : null,
+            audioUpload ? audioUpload.field : null,
             toggle('Убрать в архив', 'archived', !!item?.archived),
             formError(), el('div', { class: 'dialog-actions' }, submit(item ? 'Сохранить' : 'Создать')));
         bindForm(form, async fields => {
-            const file = fields.get('image_file');
-            const audioFile = fields.get('audio_file');
-            let imageUrl = fields.get('image_url').trim() || null;
-            let audioUrl = fields.get('audio_url')?.trim() || null;
-            if (file instanceof File && file.name) {
-                if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size < 1 || file.size > 5 * 1024 * 1024) {
-                    throw new Error('Выберите изображение PNG, JPEG или WebP размером до 5 МиБ.');
-                }
-                const upload = await request('/admin/uploads/images', { method: 'POST', file });
-                imageUrl = upload.image_url;
-            }
-            if (audioFile instanceof File && audioFile.name) {
-                if (!['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/webm'].includes(audioFile.type)
-                    || audioFile.size < 1 || audioFile.size > 20 * 1024 * 1024) {
-                    throw new Error('Выберите аудио MP3, M4A, WAV, OGG или WebM размером до 20 МиБ.');
-                }
-                const upload = await request('/admin/uploads/audio', { method: 'POST', file: audioFile });
-                audioUrl = upload.audio_url;
-            }
+            const imageUrl = await imageUpload.upload() || fields.get('image_url').trim() || null;
             const payload = { [name]: fields.get(name).trim(), description: fields.get('description').trim(),
                 image_url: imageUrl, sort_order: Number(fields.get('sort_order')), archived: fields.has('archived') };
             if (nominee) {
                 payload.nomination_id = Number(fields.get('nomination_id'));
                 for (const key of ['handle', 'song', 'image_alt', 'link_url']) payload[key] = fields.get(key).trim() || null;
-                payload.audio_url = audioUrl;
+                payload.audio_url = audioUpload ? await audioUpload.upload() || fields.get('audio_url').trim() || null
+                    : fields.get('audio_url').trim() || null;
             } else {
                 payload.status = fields.get('status');
             }

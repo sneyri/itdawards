@@ -1,6 +1,7 @@
-import { useId, useState } from 'react'
+import { memo, useId, useState } from 'react'
 import type { Nominee } from '../data/categories'
 import { makeInitials } from '../lib/format'
+import { webpSource } from '../lib/imageSource'
 import { getNomineeVisual } from '../lib/nomineeVisual'
 
 type Palette = {
@@ -121,22 +122,26 @@ type NomineeArtworkProps = {
   className?: string
 }
 
-export function NomineeArtwork({ nominee, categoryId, className }: NomineeArtworkProps) {
+export const NomineeArtwork = memo(function NomineeArtwork({ nominee, categoryId, className }: NomineeArtworkProps) {
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null)
   const visual = getNomineeVisual(categoryId, nominee, failedPhoto)
   const classes = ['nominee-art', `nominee-art--${visual}`, className].filter(Boolean).join(' ')
 
   if (visual === 'photo') {
+    const webp = webpSource(nominee.photo)
     return (
-      <img
-        className={classes}
-        src={nominee.photo ?? undefined}
-        alt={nominee.photoAlt ?? nominee.name}
-        loading="lazy"
-        draggable={false}
-        referrerPolicy="no-referrer"
-        onError={() => setFailedPhoto(nominee.photo)}
-      />
+      <picture className="nominee-art-picture">
+        {webp && <source srcSet={webp} type="image/webp" />}
+        <img
+          className={classes}
+          src={nominee.photo ?? undefined}
+          alt={nominee.photoAlt ?? nominee.name}
+          loading="lazy"
+          draggable={false}
+          referrerPolicy="no-referrer"
+          onError={() => setFailedPhoto(nominee.photo)}
+        />
+      </picture>
     )
   }
 
@@ -149,7 +154,7 @@ export function NomineeArtwork({ nominee, categoryId, className }: NomineeArtwor
   }
 
   return <Emblem nominee={nominee} className={classes} />
-}
+})
 
 function Portrait({ nominee, className }: { nominee: Nominee; className: string }) {
   const uid = useId().replace(/:/g, '')

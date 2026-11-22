@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -36,11 +37,12 @@ const wordmarkLines = [
 export function Home() {
   usePageTitle('ITD AWARDS 2026')
   const { categories, votedCount, voting } = useVotes()
-  const featuredCategories = categories.filter((categoryItem) =>
+  const featuredCategories = useMemo(() => categories.filter((categoryItem) =>
     featuredIds.includes(categoryItem.id),
-  )
-  const tickerItems = [...categories, ...categories]
+  ), [categories])
+  const tickerItems = useMemo(() => [...categories, ...categories], [categories])
   const deadline = eventDateLabel(voting.endsAt)
+  const deadlineText = voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'
   const ceremony = eventDateLabel(EVENT.ceremonyAt)
   const voteLabel = voting.open
     ? votedCount > 0 ? 'Продолжить голосование' : 'Отдать голос'
@@ -138,12 +140,13 @@ export function Home() {
             <div className="hero__deadline">
               <div className="hero__deadline-label">
                 <Clock3 size={18} aria-hidden="true" />
-                <span>{deadline && voting.open ? 'До закрытия голосования' : 'Голосование'}</span>
+                <span>
+                  {deadline && voting.open ? 'До закрытия голосования' : 'Голосование'}
+                  <small className="hero__deadline-date--inline">{deadlineText}</small>
+                </span>
               </div>
               {voting.open && voting.endsAt && deadline && <Countdown target={voting.endsAt} />}
-              <small className="hero__deadline-date">
-                {voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'}
-              </small>
+              <small className="hero__deadline-date--below">{deadlineText}</small>
             </div>
           </div>
 

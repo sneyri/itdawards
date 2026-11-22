@@ -102,7 +102,7 @@ export function Questions() {
               </div>
               <div className="contacts-card__people">
                 {telegramContacts.map((contact) => (
-                  <a key={contact.href} href={contact.href} target="_blank" rel="noreferrer">
+                  <a key={contact.href} href={contact.href} target="_blank" rel="noreferrer" className="button button--gold">
                     <Send size={14} aria-hidden="true" />
                     {contact.label}
                   </a>

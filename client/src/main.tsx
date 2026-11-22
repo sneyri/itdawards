@@ -19,6 +19,12 @@ import App from './App'
 import { ToastProvider } from './context/ToastContext'
 import { VotesProvider } from './context/VotesContext'
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
+
 if (window.location.pathname === '/') {
   const nomination = window.location.hash.match(/^#nomination\/(\d+)$/)
   if (nomination) window.history.replaceState(null, '', `/nominations/${nomination[1]}`)

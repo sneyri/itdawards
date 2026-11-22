@@ -1,0 +1,15 @@
+[databases]
+itd_awards = host=127.0.0.1 port=5433 dbname=itd_awards
+itd_awards_bot_preview = host=127.0.0.1 port=5433 dbname=itd_awards_bot_preview
+
+[pgbouncer]
+listen_addr = 127.0.0.1
+listen_port = 6432
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer/userlist.txt
+pool_mode = transaction
+max_client_conn = 200
+default_pool_size = 10
+reserve_pool_size = 5
+reserve_pool_timeout = 3
+server_idle_timeout = 600
