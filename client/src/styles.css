@@ -3047,7 +3047,18 @@ main:focus {
   cursor: pointer;
 }
 
-.track-player__volume-range::-webkit-slider-runnable-track,
+.track-player__volume-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--gold) 0,
+    var(--gold) var(--track-progress),
+    rgba(239, 231, 214, 0.14) var(--track-progress),
+    rgba(239, 231, 214, 0.14) 100%
+  );
+}
+
 .track-player__volume-range::-moz-range-track {
   height: 3px;
   border-radius: 999px;
@@ -3088,7 +3099,18 @@ main:focus {
   touch-action: manipulation;
 }
 
-.track-player__range::-webkit-slider-runnable-track,
+.track-player__range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--gold) 0,
+    var(--gold) var(--track-progress),
+    rgba(239, 231, 214, 0.14) var(--track-progress),
+    rgba(239, 231, 214, 0.14) 100%
+  );
+}
+
 .track-player__range::-moz-range-track {
   height: 3px;
   border-radius: 999px;
