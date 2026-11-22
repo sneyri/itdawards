@@ -293,6 +293,13 @@ function CategoryView({ category }: { category: Category }) {
                 <div className="vote-panel__head">
                   <p className="eyebrow">Ваш голос</p>
                 </div>
+{/* 
+                <div className="jury-review">
+                  <h2 className='jury-review__header'>Что можете сказать об номинации {category.title}?</h2>
+                  <input type="text" placeholder={'Ваш отзыв'} className='jury-review' />
+                  <button className='jury-review__button'>заказать</button>
+                </div> */}
+
                 <h2 id="vote-panel-title">
                   {saved && !editing ? 'Голос учтён' : editing ? 'Сделайте выбор' : status}
                 </h2>
@@ -427,9 +434,8 @@ function NomineeCard({
 
   return (
     <article
-      className={`nominee nominee--${visual} ${selected ? 'is-selected' : ''} ${
-        editing ? '' : 'is-locked'
-      }`}
+      className={`nominee nominee--${visual} ${selected ? 'is-selected' : ''} ${editing ? '' : 'is-locked'
+        }`}
     >
       <button
         ref={buttonRef}

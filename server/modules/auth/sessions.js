@@ -3,6 +3,7 @@ import pool, { isBotPreview } from '../../database/db.js';
 import { botUrl, secureCookies } from '../../config.js';
 import { sendError } from '../../middleware/errorHandler.js';
 import { noteAccountActivity } from '../monitoring/telemetry.js';
+import { log } from 'node:console';
 
 export const SESSION_DAYS = 14;
 const sessionCookie = isBotPreview ? 'itd_preview_session' : 'itd_session';
@@ -70,8 +71,9 @@ export function requireSession(req, res, next) {
 
 export function requireRole(...roles) {
     return (req, res, next) => requireSession(req, res, () => {
+        console.log(req.user.role)
         if (!roles.includes(req.user.role)) {
-            return sendError(res, 403, 'forbidden', 'Недостаточно прав.');
+            return sendError(res, 404, 'forbidden', 'блииин черт ничего не найдено');
         }
         next();
     });
