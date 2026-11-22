@@ -1,0 +1,6 @@
+CREATE TABLE jury_review(
+    id SERIAL PRIMARY KEY,
+    content VARCHAR(256) NOT NULL,
+    jury_name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)
