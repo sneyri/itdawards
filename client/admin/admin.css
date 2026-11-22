@@ -129,3 +129,4 @@
 
 
 .admin .invitation-code { display: block; font-size: 1.15rem; letter-spacing: .08em; width: fit-content; }
+.admin .jury-votes__nomination { display: grid; gap: 12px; }

@@ -3,7 +3,7 @@ import { loadCatalog } from './catalog.js';
 import { activityChart } from './charts.js';
 import { loadDatabase, loadSecurity } from './management.js';
 import { bindForm, button, confirmAction, date, dateInput, definition, el, formError,
-    heading, nominationStatuses, notice, numbers, request, roles, status, submit, table, textField, toast, toggle } from './ui.js';
+    heading, nominationStatuses, notice, numbers, request, roles, selectField, status, submit, table, textField, toast, toggle } from './ui.js';
 
 const view = document.getElementById('view');
 const navigation = document.getElementById('navigation');
@@ -11,6 +11,7 @@ const panels = [
     ['overview', 'Обзор', loadOverview, '◫'],
     ['catalog', 'Каталог', loadCatalog, '◇'],
     ['voting', 'Голосование', loadVoting, '▤'],
+    ['jury-votes', 'Голоса жюри', loadJuryVotes, '✦'],
     ['users', 'Пользователи', loadUsers, '◎'],
     ['invitations', 'Приглашения', loadInvitations, '＋'],
     ['system', 'Состояние сервисов', loadSystem, '⌁'],
@@ -210,6 +211,62 @@ function renderVoteHealth(signal) {
     update(currentTelemetry);
     window.addEventListener('admin:telemetry', event => update(event.detail.report), { signal });
     return output;
+}
+
+async function loadJuryVotes(_operator, signal) {
+    const data = await request('/admin/jury-votes', { signal });
+    const nominationChoices = [['', 'Все номинации'], ...data.nominations.map(nomination =>
+        [String(nomination.id), nomination.title])];
+    const filter = selectField('Номинация', 'nomination_id', nominationChoices);
+    const results = el('div', { class: 'page-stack' });
+    const view = el('section', { class: 'page-stack' },
+        heading('Голоса жюри', 'Анонимные голоса, обоснования и количество выборов по номинациям.'),
+        filter, results);
+
+    function render(result) {
+        if (!result.nominations.length) {
+            results.replaceChildren(notice('Номинаций пока нет.'));
+            return;
+        }
+        results.replaceChildren(...result.nominations.map(nomination => {
+            const counts = result.counts.filter(row => row.nomination_id === nomination.id);
+            const ballots = result.votes.filter(row => row.nomination_id === nomination.id)
+                .map(row => [row.nominee_name, row.justification, row.updated_at ? time(row.updated_at) : '—']);
+            const legacy = result.legacy_reviews.filter(row => row.nomination_id === nomination.id)
+                .map(row => ['Старый отзыв (без выбранного номинанта)', row.justification,
+                    row.created_at ? time(row.created_at) : '—']);
+            return el('section', { class: 'panel jury-votes__nomination' },
+                el('h2', {}, nomination.title),
+                el('h3', {}, 'Количество голосов за номинантов'),
+                table(['Номинант', 'Голосов'], counts.map(row => [row.nominee_name, numeric(row.vote_count)]),
+                    'В этой номинации пока нет номинантов.'),
+                el('h3', {}, 'Голоса и обоснования'),
+                table(['Номинант', 'Обоснование выбора', 'Дата изменения / отправки'], [...ballots, ...legacy],
+                    'Голосов и старых отзывов пока нет.'));
+        }));
+    }
+
+    render(data);
+    const select = filter.querySelector('select');
+    let activeController;
+    select?.addEventListener('change', async () => {
+        activeController?.abort();
+        const controller = new AbortController();
+        activeController = controller;
+        const onAbort = () => controller.abort();
+        signal.addEventListener('abort', onAbort, { once: true });
+        results.replaceChildren(notice('Загружаем голоса жюри…'));
+        const query = select.value ? '?nomination_id=' + encodeURIComponent(select.value) : '';
+        try {
+            const next = await request('/admin/jury-votes' + query, { signal: controller.signal });
+            if (!controller.signal.aborted) render(next);
+        } catch (error) {
+            if (!controller.signal.aborted) results.replaceChildren(notice(error.message, true));
+        } finally {
+            signal.removeEventListener('abort', onAbort);
+        }
+    }, { signal });
+    return view;
 }
 
 function votingTimeline(settings, stats) {
