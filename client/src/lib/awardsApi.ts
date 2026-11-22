@@ -89,7 +89,7 @@ function safeMediaUrl(value: string | null): string | null {
   if (!value) return null
   try {
     if (/^\/(?:assets|images|audio)\//.test(value) && !value.includes('\\')) return value
-    if (/^\/api\/media\/[a-f0-9]{64}$/.test(value)) return value
+    if (/^\/api\/(?:media|audio)\/[a-f0-9]{64}$/.test(value)) return value
     const url = new URL(value)
     return url.protocol === 'https:' && !url.username && !url.password ? url.href : null
   } catch {
