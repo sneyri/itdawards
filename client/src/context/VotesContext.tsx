@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Category } from '../data/categories'
 import { ApiError, fetchCatalogue, submitVote } from '../lib/awardsApi'
+import { prefetchTracks } from '../lib/mediaPrefetch'
 
 type AwardsState = Awaited<ReturnType<typeof fetchCatalogue>>
 type VotesContextValue = AwardsState & {
@@ -19,7 +20,13 @@ export function VotesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetchCatalogue(controller.signal).then(setData, (reason: unknown) => {
+    fetchCatalogue(controller.signal).then((catalog) => {
+      setData(catalog)
+      const urls = catalog.categories.flatMap((category) =>
+        category.nominees.map((nominee) => nominee.audio).filter((audio): audio is string => Boolean(audio)),
+      )
+      void prefetchTracks(urls)
+    }, (reason: unknown) => {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Попробуйте ещё раз.')
     })
     return () => controller.abort()
