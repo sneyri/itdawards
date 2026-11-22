@@ -4,6 +4,7 @@ import { codeSecret } from '../../config.js';
 import { CODE_TTL_SECONDS, loginCodeCooldown, storeLoginCode } from './loginCodes.js';
 
 const invitationRoles = ['USER', 'JURY'];
+const juryInvitationTtlSeconds = 100 * 365 * 24 * 3600;
 const managerRoles = ['MANAGER', 'SUPERADMIN'];
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const pageSize = 100;
@@ -46,12 +47,13 @@ async function invitationById(client, invitationId) {
 }
 
 async function issueInvitation(client, actorId, user, action) {
+    const ttlSeconds = user.role === 'JURY' ? juryInvitationTtlSeconds : CODE_TTL_SECONDS;
     const { rows: [invitation] } = await client.query(`
         INSERT INTO invitation_codes (account_id, role, creator_id, expires_at, max_uses, created_at)
         VALUES ($1, $2, $3, statement_timestamp() + make_interval(secs => $4), 1, statement_timestamp())
         RETURNING id
-    `, [user.id, user.role, actorId, CODE_TTL_SECONDS]);
-    const { code } = await storeLoginCode(client, user.id, invitation.id);
+    `, [user.id, user.role, actorId, ttlSeconds]);
+    const { code } = await storeLoginCode(client, user.id, invitation.id, ttlSeconds);
     await client.query(`
         UPDATE invitation_codes AS invitation SET expires_at = code.expires_at
         FROM auth_codes AS code WHERE invitation.id = $1 AND code.invitation_id = invitation.id

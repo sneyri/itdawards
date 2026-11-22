@@ -25,10 +25,10 @@ export function url(allowAsset = false) {
         const raw = string(2048)(value);
         if (allowAsset && /^\/assets\/(?:[\p{L}\p{N}_.-]+\/)*[\p{L}\p{N}_.-]+$/u.test(raw)
             && !raw.split('/').some((part) => part === '.' || part === '..')) return raw;
-        if (allowAsset && /^\/api\/media\/[a-f0-9]{64}$/.test(raw)) return raw;
+        if (allowAsset && /^\/api\/(?:media|audio)\/[a-f0-9]{64}$/.test(raw)) return raw;
         const parsed = URL.parse(raw);
         if (parsed?.protocol !== 'https:' || parsed.username || parsed.password) {
-            invalid(allowAsset ? 'Укажите HTTPS-адрес или путь /assets/…' : 'Укажите HTTPS-адрес ссылки.');
+            invalid(allowAsset ? 'Укажите HTTPS-адрес, путь /assets/… или загрузите файл.' : 'Укажите HTTPS-адрес ссылки.');
         }
         return parsed.href;
     };

@@ -73,6 +73,9 @@ export async function uploadCatalogImage(req, res) {
     const mediaType = req.is(rasterTypes);
     if (!mediaType) return sendError(res, 415, 'unsupported_image', 'Загрузите PNG, JPEG или WebP.');
     const bytes = req.body;
+    if (!Buffer.isBuffer(bytes) || bytes.length > 5 * 1024 * 1024) {
+        return sendError(res, 400, 'invalid_image', 'Изображение должно быть до 5 МБ.');
+    }
     const size = Buffer.isBuffer(bytes) && imageSize[mediaType](bytes);
     if (!size || size.some((side) => side < 1 || side > 4096)) {
         return sendError(res, 400, 'invalid_image', 'Проверьте формат и размер изображения. Максимум 4096 × 4096 пикселей.');

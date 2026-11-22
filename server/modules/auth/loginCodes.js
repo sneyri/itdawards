@@ -17,7 +17,7 @@ export function hashCode(code) {
     return createHmac('sha256', codeSecret).update(code).digest();
 }
 
-export async function storeLoginCode(client, userId, invitationId = null) {
+export async function storeLoginCode(client, userId, invitationId = null, ttlSeconds = CODE_TTL_SECONDS) {
     // Callers lock the account row before checking cooldown and replacing a code.
     // The 32-character alphabet divides the possible byte values evenly.
     const code = Array.from(randomBytes(CODE_LENGTH), (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join('');
@@ -26,7 +26,7 @@ export async function storeLoginCode(client, userId, invitationId = null) {
         VALUES ($1, $2, statement_timestamp(), statement_timestamp() + make_interval(secs => $3), $4)
         ON CONFLICT (user_id) DO UPDATE SET code_hash = EXCLUDED.code_hash, issued_at = EXCLUDED.issued_at,
             expires_at = EXCLUDED.expires_at, used_at = NULL, invitation_id = EXCLUDED.invitation_id
-    `, [userId, hashCode(code), CODE_TTL_SECONDS, invitationId]);
+    `, [userId, hashCode(code), ttlSeconds, invitationId]);
     return { code: code.match(/.{4}/g).join('-') };
 }
 
