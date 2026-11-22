@@ -6,5 +6,5 @@ Frontend премии ITD AWARDS 2026.
 - Публичные страницы: `src/pages/`, компоненты: `src/components/`, стили: `src/styles.css`.
 - Админка `/admin` и страница `/account` — отдельные HTML/CSS/JS в `admin/`, не React.
 - Команды из каталога `client`: `npm run dev` (Vite, порт 5173), `npm run build` (`tsc -b && vite build`), `npm run lint` (oxlint).
-- Vite проксирует `/api`, `/assets`, `/admin`, `/account`, `/control` на `http://127.0.0.1:5000`; для другого порта задайте `API_PORT`.
+- Vite проксирует `/api`, `/assets`, `/admin`, `/account`, `/control` на `http://127.0.0.1:5000`; для другого порта задайте `API_PORT`, для внешнего API — `API_URL`. Запись (`POST/PATCH/PUT/DELETE` на `/api`) в локальном режиме заблокирована.
 - При работе с репозиторием использовать ветку `feature/client`, не `main`. Изменения только внутри `client/`.
