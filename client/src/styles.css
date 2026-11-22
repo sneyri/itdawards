@@ -3362,6 +3362,117 @@ main:focus {
   line-height: 1.55;
 }
 
+.vote-panels {
+  display: contents;
+}
+
+.vote-panels--jury {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.vote-panels--jury > .vote-panel {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+.jury-vote__message,
+.jury-vote__form {
+  margin-top: 16px;
+}
+
+.jury-vote__form {
+  display: grid;
+  gap: 12px;
+}
+
+.jury-vote__field {
+  display: grid;
+  gap: 7px;
+  color: var(--cream-soft);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.jury-vote__field :is(select, textarea) {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  outline: none;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--cream);
+  font: inherit;
+  font-size: 12px;
+}
+
+.jury-vote__field select {
+  min-height: 42px;
+}
+
+.jury-vote__field textarea {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.jury-vote__field :is(select, textarea):focus-visible {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(205, 181, 124, 0.18);
+}
+
+.jury-vote__field :is(select, textarea):disabled {
+  opacity: 0.65;
+}
+
+.jury-vote__field option {
+  background: var(--ink-2);
+  color: var(--cream);
+}
+
+.jury-vote__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.jury-vote__justification {
+  margin-top: 15px;
+  padding: 11px 12px;
+  border: 1px solid rgba(205, 181, 124, 0.1);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--cream-soft);
+  font-size: 11px;
+}
+
+.jury-vote__justification p {
+  margin-top: 6px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.jury-vote__success {
+  margin-top: 12px;
+  color: var(--gold-bright);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.jury-vote__button {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .category-pagination {
   display: grid;
   gap: 9px;
@@ -5549,6 +5660,10 @@ main:focus {
 }
 
 @media (max-width: 899px) {
+  .vote-panels--jury {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .nominee-list > .nominee {
     flex-basis: calc(50% - 6px);
     max-width: calc(50% - 6px);

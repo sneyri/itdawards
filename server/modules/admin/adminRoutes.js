@@ -10,6 +10,7 @@ import {
 } from '../awards/adminCatalog.js';
 import { getSettings, updateSettings } from '../voting/settings.js';
 import { getAdminResults, exportResultsCsv, exportResultsJson } from '../voting/results.js';
+import { getAdminJuryVotes } from '../jury/juryControllers.js';
 
 const router = Router();
 router.use(requireRole('MANAGER', 'SUPERADMIN'));
@@ -29,6 +30,7 @@ router.get('/users/:id', getUser);
 router.patch('/users/:id', updateUser);
 router.get('/settings', getSettings);
 router.patch('/settings', updateSettings);
+router.get('/jury-votes', getAdminJuryVotes);
 
 router.use(requireRole('SUPERADMIN'));
 router.get('/audit', getAudit);

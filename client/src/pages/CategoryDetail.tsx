@@ -292,67 +292,75 @@ function CategoryView({ category }: { category: Category }) {
               )}
             </div>
 
-            <aside className="vote-panel" aria-labelledby="vote-panel-title">
-              <div className="vote-panel__intro">
-                <div className="vote-panel__head">
-                  <p className="eyebrow">Ваш голос</p>
+            <div className={`vote-panels${auth.user?.role === 'JURY' ? ' vote-panels--jury' : ''}`}>
+              <aside className="vote-panel" aria-labelledby="vote-panel-title">
+                <div className="vote-panel__intro">
+                  <div className="vote-panel__head">
+                    <p className="eyebrow">Ваш голос</p>
+                  </div>
+
+                  <h2 id="vote-panel-title">
+                    {saved && !editing ? 'Голос учтён' : editing ? 'Сделайте выбор' : status}
+                  </h2>
                 </div>
 
-                <h2 id="vote-panel-title">
-                  {saved && !editing ? 'Голос учтён' : editing ? 'Сделайте выбор' : status}
-                </h2>
-              </div>
+                <ul className="picked-list">
+                  {selectedName ? (
+                    <li>
+                      <span className="picked-list__check" aria-hidden="true">
+                        <Check size={12} strokeWidth={3} />
+                      </span>
+                      <span className="picked-list__name">{selectedName}</span>
+                      {editing && !saving && (
+                        <button
+                          type="button"
+                          className="picked-list__remove"
+                          onClick={() => setDraft(undefined)}
+                          aria-label={`Убрать ${selectedName} из выбора`}
+                        >
+                          <X size={13} aria-hidden="true" />
+                        </button>
+                      )}
+                    </li>
+                  ) : (
+                    <li className="picked-list__empty">
+                      {editing ? 'Пока пусто — выберите номинанта.' : saved ? 'Голос сохранён.' : 'Голос не отдан.'}
+                    </li>
+                  )}
+                </ul>
 
-              <ul className="picked-list">
-                {selectedName ? (
-                  <li>
-                    <span className="picked-list__check" aria-hidden="true">
-                      <Check size={12} strokeWidth={3} />
-                    </span>
-                    <span className="picked-list__name">{selectedName}</span>
-                    {editing && !saving && (
-                      <button
-                        type="button"
-                        className="picked-list__remove"
-                        onClick={() => setDraft(undefined)}
-                        aria-label={`Убрать ${selectedName} из выбора`}
-                      >
-                        <X size={13} aria-hidden="true" />
-                      </button>
-                    )}
-                  </li>
-                ) : (
-                  <li className="picked-list__empty">
-                    {editing ? 'Пока пусто — выберите номинанта.' : saved ? 'Голос сохранён.' : 'Голос не отдан.'}
-                  </li>
-                )}
-              </ul>
+                <div className="vote-panel__action">
+                  {error && (
+                    <p className="form-error" role="alert">
+                      {error}
+                    </p>
+                  )}
 
-              <div className="vote-panel__action">
-                {error && (
-                  <p className="form-error" role="alert">
-                    {error}
-                  </p>
-                )}
-
-                {editing && (
-                  <button type="button" className="button button--gold vote-panel__button" onClick={handleSave} disabled={saving}>
-                    {saving ? 'Сохраняем…' : 'Сохранить голос'}
-                    <Check size={17} aria-hidden="true" />
-                  </button>
-                )}
-                {canVote && saved && !editing && voting.allowVoteChanges && (
-                  <button
-                    type="button"
-                    className="button button--ghost vote-panel__button"
-                    onClick={handleEdit}
-                  >
-                    Изменить голос
-                    <Pencil size={15} aria-hidden="true" />
-                  </button>
-                )}
-              </div>
-            </aside>
+                  {editing && (
+                    <button type="button" className="button button--gold vote-panel__button" onClick={handleSave} disabled={saving}>
+                      {saving ? 'Сохраняем…' : 'Сохранить голос'}
+                      <Check size={17} aria-hidden="true" />
+                    </button>
+                  )}
+                  {canVote && saved && !editing && voting.allowVoteChanges && (
+                    <button
+                      type="button"
+                      className="button button--ghost vote-panel__button"
+                      onClick={handleEdit}
+                    >
+                      Изменить голос
+                      <Pencil size={15} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              </aside>
+              {auth.user?.role === 'JURY' && (
+                <JuryReview
+                  categoryId={category.apiId}
+                  nominees={category.nominees.map(({ id, name }) => ({ id, name }))}
+                />
+              )}
+            </div>
           </div>
 
           <nav className="category-pagination" aria-label="Другие номинации">
@@ -387,7 +395,6 @@ function CategoryView({ category }: { category: Category }) {
               </strong>
             </Link>
           </nav>
-          <JuryReview categoryId={category.apiId} categoryTitle={category.title} />
         </div>
       </section>
 
