@@ -23,7 +23,8 @@ export async function storeLoginCode(client, userId, invitationId = null, ttlSec
     const code = Array.from(randomBytes(CODE_LENGTH), (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join('');
     await client.query(`
         INSERT INTO auth_codes (user_id, code_hash, issued_at, expires_at, invitation_id)
-        VALUES ($1, $2, statement_timestamp(), statement_timestamp() + make_interval(secs => $3), $4)
+        VALUES ($1, $2, statement_timestamp(),
+            CASE WHEN $4::uuid IS NULL THEN statement_timestamp() + make_interval(secs => $3) END, $4)
         ON CONFLICT (user_id) DO UPDATE SET code_hash = EXCLUDED.code_hash, issued_at = EXCLUDED.issued_at,
             expires_at = EXCLUDED.expires_at, used_at = NULL, invitation_id = EXCLUDED.invitation_id
     `, [userId, hashCode(code), ttlSeconds, invitationId]);
@@ -49,7 +50,8 @@ export async function consumeLoginCode(client, code) {
     if (!user || user.blocked) return null;
     const { rows: [consumed] } = await client.query(`
         UPDATE auth_codes SET used_at = clock_timestamp()
-        WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL AND expires_at > clock_timestamp()
+        WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL
+            AND (expires_at IS NULL OR expires_at > clock_timestamp())
         RETURNING invitation_id, used_at
     `, [user.id, codeHash]);
     if (!consumed) return null;

@@ -73,7 +73,7 @@ MAX_NOMINEE_LENGTH = 60
 # Публичный канал: @username. Приватный: числовой ID вида -1001234567890.
 # Пустое значение отключает проверку. Бот должен быть АДМИНОМ этого канала.
 REQUIRED_CHANNEL = os.getenv("REQUIRED_CHANNEL", "@itditp113").strip()
-CHANNEL_URL = os.getenv("CHANNEL_URL", "https://t.me/itditp113").strip()
+CHANNEL_URL = os.getenv("CHANNEL_URL", "https://t.me/itditp113?direct").strip()
 
 
 # Не больше RATE_LIMIT_ACTIONS действий за RATE_LIMIT_WINDOW секунд от одного человека.

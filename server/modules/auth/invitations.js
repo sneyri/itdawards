@@ -13,7 +13,8 @@ const invitationDetails = `SELECT i.id, i.role, i.created_at, i.expires_at, i.ma
     CASE WHEN i.revoked_at IS NOT NULL THEN 'revoked'
         WHEN i.use_count >= i.max_uses THEN 'used'
         WHEN code.used_at IS NOT NULL THEN 'revoked'
-        WHEN i.account_id IS NULL OR i.expires_at <= clock_timestamp() THEN 'expired' ELSE 'active' END AS status
+        WHEN i.account_id IS NULL OR (i.expires_at IS NOT NULL AND i.expires_at <= clock_timestamp())
+        THEN 'expired' ELSE 'active' END AS status
     FROM invitation_codes i JOIN users creator ON creator.id = i.creator_id
     LEFT JOIN auth_codes code ON code.user_id = i.account_id AND code.invitation_id = i.id`;
 
@@ -122,7 +123,8 @@ export async function reissueInvitation(req, res) {
 
         await client.query(`
             UPDATE invitation_codes SET revoked_at = clock_timestamp()
-            WHERE account_id = $1 AND use_count = 0 AND revoked_at IS NULL AND expires_at > clock_timestamp()
+            WHERE account_id = $1 AND use_count = 0 AND revoked_at IS NULL
+                AND (expires_at IS NULL OR expires_at > clock_timestamp())
         `, [user.id]);
         return { invitation: await issueInvitation(client, req.user.id, user, 'invitation.reissued') };
     });

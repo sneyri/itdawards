@@ -16,7 +16,7 @@ export async function uploadCatalogAudio(req, res) {
     if (!mediaType) return sendError(res, 415, 'unsupported_audio', 'Загрузите MP3, M4A, WAV, OGG или WebM.');
     const bytes = req.body;
     if (!Buffer.isBuffer(bytes) || bytes.length < 1 || bytes.length > audioLimit) {
-        return sendError(res, 400, 'invalid_audio', 'Аудиофайл должен быть до 20 МБ.');
+        return sendError(res, 400, 'invalid_audio', 'Аудиофайл должен быть до 20 МиБ.');
     }
     const id = createHash('sha256').update(bytes).digest('hex');
     const allowed = await transaction(async (client) => {
