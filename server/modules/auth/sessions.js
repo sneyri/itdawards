@@ -71,7 +71,7 @@ export function requireSession(req, res, next) {
 export function requireRole(...roles) {
     return (req, res, next) => requireSession(req, res, () => {
         if (!roles.includes(req.user.role)) {
-            return sendError(res, 404, 'forbidden', 'ээээ чот не найдено');
+            return sendError(res, 403, 'forbidden', 'Недостаточно прав.');
         }
         next();
     });
