@@ -1,4 +1,4 @@
-export const ITD_CHANNEL_URL = 'https://t.me/itditp113'
+export const ITD_CHANNEL_URL = 'https://t.me/itditp113?direct'
 
 export const telegramChannels = [
   { label: 'ИТД ИТП', shortLabel: 'ИТД ИТП', href: ITD_CHANNEL_URL },

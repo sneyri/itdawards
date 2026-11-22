@@ -41,6 +41,7 @@ export function Home() {
   )
   const tickerItems = [...categories, ...categories]
   const deadline = eventDateLabel(voting.endsAt)
+  const deadlineText = voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'
   const ceremony = eventDateLabel(EVENT.ceremonyAt)
   const voteLabel = voting.open
     ? votedCount > 0 ? 'Продолжить голосование' : 'Отдать голос'
@@ -140,10 +141,11 @@ export function Home() {
                 <Clock3 size={18} aria-hidden="true" />
                 <span>
                   {deadline && voting.open ? 'До закрытия голосования' : 'Голосование'}
-                  <small>{voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'}</small>
+                  <small className="hero__deadline-date--inline">{deadlineText}</small>
                 </span>
               </div>
               {voting.open && voting.endsAt && deadline && <Countdown target={voting.endsAt} />}
+              <small className="hero__deadline-date--below">{deadlineText}</small>
             </div>
           </div>
 
@@ -181,7 +183,7 @@ export function Home() {
           <Reveal delay={80}>
             <p className="intro__copy">
               ITD AWARDS — первая премия сообщества. Здесь мы говорим «спасибо»
-              тем, кто наполнял ленту, эфиры и чаты. Побеждают не по количеству
+              тем, кто наполнял ленту. Побеждают не по количеству
               подписчиков, а по тому, кого действительно помнит сообщество.
             </p>
             <div className="stat-strip">

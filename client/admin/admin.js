@@ -68,6 +68,7 @@ async function loadOverview(_operator, signal) {
     const services = el('div');
     const phase = el('div');
     const votes = el('strong', { class: 'stat-value' });
+    const voterPercent = stats.users ? Math.round(stats.voters / stats.users * 100) : 0;
     function update(report) {
         votes.textContent = numeric(report?.stats?.votes ?? stats.votes);
         services.replaceChildren(servicesShort(report));
@@ -79,10 +80,12 @@ async function loadOverview(_operator, signal) {
     return el('section', { class: 'page-stack' },
         heading('Обзор', 'Каталог, участники и голосование', pageHref('Управлять голосованием', 'voting', 'primary')),
         el('div', { class: 'stat-grid' },
-            statCard('Бюллетени', votes),
-            statCard('Пользователи', stats.users),
-            statCard('Номинации', stats.nominations),
-            statCard('Активные коды', stats.invitations_active)),
+            statCard({ label: 'Пользователи', value: stats.users, icon: '◎', note: 'Вошли в аккаунт: ' + stats.registered }),
+            statCard({ label: 'Голоса', value: votes, icon: '◆', note: 'Баллов с весом: ' + stats.weighted_score }),
+            statCard({ label: 'Проголосовали', value: stats.voters, icon: '✓', note: voterPercent + '% от всех пользователей' }),
+            statCard({ label: 'Номинации', value: stats.nominations, icon: '◫', note: 'Номинантов: ' + stats.nominees }),
+            statCard({ label: 'Жюри', value: stats.jurors, icon: '✦', note: 'Администраторов: ' + stats.administrators }),
+            statCard({ label: 'Активные коды', value: stats.invitations_active, icon: '⌁', note: 'Доступных приглашений' })),
         el('div', { class: 'dashboard-grid' },
             el('div', { class: 'page-stack' },
                 panel('Голосование', phase, pageHref('Настройки', 'voting', 'subtle compact')),
@@ -90,11 +93,15 @@ async function loadOverview(_operator, signal) {
             panel('Последние действия', eventList(stats.recent_actions))));
 }
 
-function statCard(label, value) {
-    const display = value instanceof Node ? value : el('strong', { class:'stat-value' });
+function statCard({ label, value, note, icon }) {
+    const display = value instanceof Node ? value : el('strong', { class: 'stat-value' });
     if (!(value instanceof Node)) display.textContent = numeric(value);
-    return el('article', { class: 'panel stat-card' }, el('h2', {}, label),
-        display);
+    return el('article', { class: 'panel stat-card' },
+        el('div', { class: 'stat-card__head' },
+            el('h2', {}, label),
+            el('span', { class: 'stat-card__icon', 'aria-hidden': 'true' }, icon)),
+        display,
+        note ? el('p', { class: 'stat-card__note' }, note) : null);
 }
 
 function settingsForm(settings, owner, signal) {

@@ -5,8 +5,8 @@ const backend = process.env.API_URL ?? `http://127.0.0.1:${process.env.API_PORT 
 
 const blockWrites = {
   name: 'block-local-writes',
-  configureServer(server) {
-    server.middlewares.use((req, res, next) => {
+  configureServer(server: any) {
+    server.middlewares.use((req: any, res: any, next: any) => {
       if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method ?? '') && (req.url ?? '').startsWith('/api')) {
         res.statusCode = 403
         res.end('Local demo: write requests are blocked')

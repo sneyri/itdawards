@@ -1,22 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, CSSProperties } from 'react'
-import { Pause, Play } from 'lucide-react'
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 
 type TrackPlayerProps = {
   src: string
   title: string
-}
-
-function makeBars(seed: string): number[] {
-  let hash = 2166136261
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return Array.from({ length: 40 }, (_, index) => {
-    const value = Math.abs(Math.sin((hash + index * 47) * 0.013))
-    return 24 + Math.round(value * 68)
-  })
 }
 
 function formatTime(value: number): string {
@@ -32,14 +20,22 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(0)
   const [failed, setFailed] = useState(false)
-  const bars = makeBars(title)
+  const [volume, setVolume] = useState(1)
+  const [muted, setMuted] = useState(false)
+
+  const syncMeta = () => {
+    const audio = audioRef.current
+    if (!audio) return
+    setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+    setCurrent(audio.currentTime)
+  }
 
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
 
     const onTime = () => setCurrent(audio.currentTime)
-    const onMetadata = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0)
+    const onMetadata = syncMeta
     const onPlay = () => setPlaying(true)
     const onPause = () => setPlaying(false)
     const onEnded = () => {
@@ -80,6 +76,16 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
     return () => window.removeEventListener('itd:audio-play', pauseOther)
   }, [])
 
+  useEffect(() => {
+    const audio = audioRef.current
+    if (audio) audio.volume = volume
+  }, [volume])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (audio) audio.muted = muted
+  }, [muted])
+
   const toggle = async () => {
     const audio = audioRef.current
     if (!audio || failed) return
@@ -104,12 +110,17 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
     setCurrent(next)
   }
 
+  const changeVolume = (event: ChangeEvent<HTMLInputElement>) => {
+    setVolume(Number(event.target.value))
+    setMuted(false)
+  }
+
   const progress = duration > 0 ? Math.min(100, (current / duration) * 100) : 0
-  const playedBars = Math.round((progress / 100) * bars.length)
+  const volumeLevel = muted ? 0 : volume
 
   return (
     <div className={`track-player ${failed ? 'has-error' : ''}`} role="group" aria-label={`Аудиофрагмент: ${title}`}>
-      <audio ref={audioRef} src={src} preload="metadata" />
+      <audio ref={audioRef} src={src} preload="none" onLoadedMetadata={syncMeta} />
       <button
         type="button"
         className="track-player__play"
@@ -120,15 +131,27 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
         {playing ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
       </button>
       <div className="track-player__main">
-        <span className="track-player__wave" aria-hidden="true">
-          {bars.map((height, index) => (
-            <span
-              key={index}
-              className={index < playedBars ? 'is-played' : ''}
-              style={{ height: `${height}%` }}
-            />
-          ))}
-        </span>
+        <div className={`track-player__volume ${playing ? '' : 'is-idle'}`}>
+          <button
+            type="button"
+            className="track-player__mute"
+            onClick={() => setMuted((value) => !value)}
+            aria-label={muted ? `Включить звук: ${title}` : `Выключить звук: ${title}`}
+          >
+            {muted ? <VolumeX size={13} aria-hidden="true" /> : <Volume2 size={13} aria-hidden="true" />}
+          </button>
+          <input
+            type="range"
+            className="track-player__volume-range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={volumeLevel}
+            onChange={changeVolume}
+            aria-label={`Громкость: ${title}`}
+            style={{ '--track-progress': `${volumeLevel * 100}%` } as CSSProperties}
+          />
+        </div>
         <input
           type="range"
           className="track-player__range"
