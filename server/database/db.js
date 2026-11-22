@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 
 export const botPreviewDatabase = 'itd_awards_bot_preview';
 export const isBotPreview = process.argv.includes('--bot-preview');
+const configuredMax = Number.parseInt(process.env.DB_POOL_MAX ?? '10', 10);
 
 export const connectionOptions = {
     user: process.env.DB_USER,
@@ -10,6 +11,8 @@ export const connectionOptions = {
     password: process.env.DB_PASSWORD,
     port: process.env.DB_PORT,
     connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 30000,
+    max: Number.isFinite(configuredMax) && configuredMax > 0 ? configuredMax : 10,
 };
 
 const pool = new Pool(connectionOptions);

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -36,10 +37,10 @@ const wordmarkLines = [
 export function Home() {
   usePageTitle('ITD AWARDS 2026')
   const { categories, votedCount, voting } = useVotes()
-  const featuredCategories = categories.filter((categoryItem) =>
+  const featuredCategories = useMemo(() => categories.filter((categoryItem) =>
     featuredIds.includes(categoryItem.id),
-  )
-  const tickerItems = [...categories, ...categories]
+  ), [categories])
+  const tickerItems = useMemo(() => [...categories, ...categories], [categories])
   const deadline = eventDateLabel(voting.endsAt)
   const deadlineText = voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'
   const ceremony = eventDateLabel(EVENT.ceremonyAt)

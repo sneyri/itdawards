@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { ArrowUpRight, Check } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Category } from '../data/categories'
@@ -5,7 +6,7 @@ import { groupLabels } from '../data/categories'
 import { useVotes } from '../context/VotesContext'
 import { CategoryImage } from './CategoryImage'
 
-export function CategoryRow({ category }: { category: Category }) {
+export const CategoryRow = memo(function CategoryRow({ category }: { category: Category }) {
   const { votes, voteNames } = useVotes()
   const isVoted = votes[category.id] !== undefined
   const selectedName = voteNames[category.id]
@@ -47,4 +48,4 @@ export function CategoryRow({ category }: { category: Category }) {
       </span>
     </Link>
   )
-}
+})
