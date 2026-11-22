@@ -3,7 +3,7 @@ import { codeSecret } from '../../config.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 12;
-export const CODE_TTL_SECONDS = 300;
+export const CODE_TTL_SECONDS = 600;
 const CODE_COOLDOWN_SECONDS = 60;
 
 export function parseCode(value) {

@@ -7,6 +7,7 @@ import awardsRoutes from '../modules/awards/awardsRoutes.js';
 import mediaRoutes from '../modules/awards/mediaRoutes.js';
 import uploadRoutes from '../modules/awards/uploadRoutes.js';
 import votingRoutes from '../modules/voting/votingRoutes.js';
+import juryRoutes from '../modules/jury/juryRoutes.js'
 import { systemStatus } from '../modules/monitoring/system.js';
 import { readSession, requireRole } from '../modules/auth/sessions.js';
 import botRoutes from './botRoutes.js';
@@ -25,6 +26,7 @@ router.use('/auth', authRoutes);
 router.use('/nominations', awardsRoutes);
 router.use('/votes', votingRoutes);
 router.use('/media', mediaRoutes);
+router.use('/jury', juryRoutes)
 router.use('/admin/uploads', readSession, uploadRoutes);
 router.get('/admin/system', readSession, requireRole('MANAGER', 'SUPERADMIN'), systemStatus);
 router.use('/admin/invitations', readSession, invitationRoutes);
