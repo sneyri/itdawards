@@ -1,3 +1,3 @@
 export function test(req, res){
-    res.json({"status": "200"})
+    res.json({"status": "ok", "разраб": 200})
 }
