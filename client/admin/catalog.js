@@ -29,6 +29,53 @@ function availability(row) {
     return status(nominationStatuses[row.status], row.status === 'open' ? 'ok' : '');
 }
 
+function fileDropField(label, name, accept, types, maxBytes, maxLabel) {
+    const input = el('input', { class: 'file-drop__input', type: 'file', name, accept, 'aria-label': label });
+    const message = el('span', { class: 'file-drop__message', 'aria-live': 'polite' }, 'Файл не выбран');
+    const zone = el('span', { class: 'file-drop' },
+        el('span', { class: 'file-drop__prompt' }, 'Перетащите файл сюда или нажмите, чтобы выбрать'),
+        input, message);
+    const field = el('label', { class: 'field' }, label, zone);
+
+    function choose(file) {
+        if (!file) return;
+        if (!types.includes(file.type)) {
+            input.value = '';
+            message.textContent = 'Неподдерживаемый формат файла.';
+            message.classList.add('is-error');
+            return;
+        }
+        if (file.size < 1 || file.size > maxBytes) {
+            input.value = '';
+            message.textContent = `Размер файла должен быть от 1 байта до ${maxLabel}.`;
+            message.classList.add('is-error');
+            return;
+        }
+        message.textContent = `${file.name} · ${(file.size / (1024 * 1024)).toFixed(2)} МиБ`;
+        message.classList.remove('is-error');
+    }
+
+    input.addEventListener('change', () => choose(input.files?.[0]));
+    zone.addEventListener('dragover', event => {
+        event.preventDefault();
+        zone.classList.add('is-dragging');
+    });
+    zone.addEventListener('dragleave', event => {
+        if (!zone.contains(event.relatedTarget)) zone.classList.remove('is-dragging');
+    });
+    zone.addEventListener('drop', event => {
+        event.preventDefault();
+        zone.classList.remove('is-dragging');
+        const file = event.dataTransfer?.files[0];
+        if (!file) return;
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        input.files = transfer.files;
+        choose(file);
+    });
+    return field;
+}
+
 export async function loadCatalog(_operator, signal, { nominationId, nomineeId } = {}) {
     const root = el('section');
     const list = el('div', { class: 'catalog-index' });
@@ -221,31 +268,48 @@ export async function loadCatalog(_operator, signal, { nominationId, nomineeId }
             el('label', { class: 'field' }, 'Описание',
                 el('textarea', { name: 'description', rows: 4, maxlength: 1200 }, item?.description ?? '')),
             textField('Адрес изображения', 'image_url', item?.image_url ?? '', { maxlength: 2048, placeholder: 'https://…' }),
-            textField('Загрузить изображение', 'image_file', '', { type: 'file', accept: 'image/png,image/jpeg,image/webp' }),
-            el('p', { class: 'muted' }, 'PNG, JPEG или WebP, до 2 МБ и 4096 × 4096. Загруженный файл заменит адрес.'),
+            fileDropField('Загрузить изображение', 'image_file', 'image/png,image/jpeg,image/webp',
+                ['image/png', 'image/jpeg', 'image/webp'], 5 * 1024 * 1024, '5 МиБ'),
+            el('p', { class: 'muted' }, 'PNG, JPEG или WebP, до 5 МиБ и 4096 × 4096. Загруженный файл заменит адрес.'),
             nominee ? el('div', { class: 'form-grid' },
                 textField('Никнейм', 'handle', item?.handle ?? '', { maxlength: 100 }),
                 textField('Ссылка на профиль (HTTPS)', 'link_url', item?.link_url ?? '', { maxlength: 2048 }),
                 textField('Название трека', 'song', item?.song ?? '', { maxlength: 200 }),
                 textField('Аудио (HTTPS или /assets/…)', 'audio_url', item?.audio_url ?? '', { maxlength: 2048 }),
+                fileDropField('Загрузить аудио', 'audio_file',
+                    'audio/mpeg,audio/mp4,audio/wav,audio/ogg,audio/webm',
+                    ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/webm'],
+                    20 * 1024 * 1024, '20 МиБ'),
+                el('p', { class: 'muted' }, 'MP3, M4A, WAV, OGG или WebM, до 20 МиБ. Загруженный файл заменит адрес.'),
                 textField('Описание изображения', 'image_alt', item?.image_alt ?? '', { maxlength: 300 })) : null,
             toggle('Убрать в архив', 'archived', !!item?.archived),
             formError(), el('div', { class: 'dialog-actions' }, submit(item ? 'Сохранить' : 'Создать')));
         bindForm(form, async fields => {
             const file = fields.get('image_file');
+            const audioFile = fields.get('audio_file');
             let imageUrl = fields.get('image_url').trim() || null;
-            if (file?.size) {
-                if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
-                    throw new Error('Выберите изображение PNG, JPEG или WebP размером до 2 МБ.');
+            let audioUrl = fields.get('audio_url')?.trim() || null;
+            if (file instanceof File && file.name) {
+                if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size < 1 || file.size > 5 * 1024 * 1024) {
+                    throw new Error('Выберите изображение PNG, JPEG или WebP размером до 5 МиБ.');
                 }
                 const upload = await request('/admin/uploads/images', { method: 'POST', file });
                 imageUrl = upload.image_url;
+            }
+            if (audioFile instanceof File && audioFile.name) {
+                if (!['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/ogg', 'audio/webm'].includes(audioFile.type)
+                    || audioFile.size < 1 || audioFile.size > 20 * 1024 * 1024) {
+                    throw new Error('Выберите аудио MP3, M4A, WAV, OGG или WebM размером до 20 МиБ.');
+                }
+                const upload = await request('/admin/uploads/audio', { method: 'POST', file: audioFile });
+                audioUrl = upload.audio_url;
             }
             const payload = { [name]: fields.get(name).trim(), description: fields.get('description').trim(),
                 image_url: imageUrl, sort_order: Number(fields.get('sort_order')), archived: fields.has('archived') };
             if (nominee) {
                 payload.nomination_id = Number(fields.get('nomination_id'));
-                for (const key of ['handle', 'song', 'image_alt', 'audio_url', 'link_url']) payload[key] = fields.get(key).trim() || null;
+                for (const key of ['handle', 'song', 'image_alt', 'link_url']) payload[key] = fields.get(key).trim() || null;
+                payload.audio_url = audioUrl;
             } else {
                 payload.status = fields.get('status');
             }

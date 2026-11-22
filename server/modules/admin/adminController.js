@@ -21,7 +21,10 @@ export async function getStats(req, res) {
                 (SELECT count(*)::int FROM nominees) AS nominees,
                 (SELECT count(*)::int FROM invitation_codes AS invitation
                     JOIN auth_codes AS code ON code.user_id = invitation.account_id AND code.invitation_id = invitation.id
-                    WHERE invitation.revoked_at IS NULL AND code.expires_at > now() AND code.used_at IS NULL) AS invitations_active,
+                    WHERE invitation.revoked_at IS NULL AND invitation.use_count < invitation.max_uses
+                        AND (invitation.expires_at IS NULL OR invitation.expires_at > now())
+                        AND (code.expires_at IS NULL OR code.expires_at > now())
+                        AND code.used_at IS NULL) AS invitations_active,
                 (SELECT ${activeVoting} FROM settings s WHERE s.id = 1) AS voting_open
             FROM accounts CROSS JOIN ballots
         `),

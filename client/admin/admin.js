@@ -25,7 +25,7 @@ const auditLabels = {
     'nomination.created': 'Создана номинация', 'nomination.updated': 'Изменена номинация', 'nomination.deleted': 'Удалена номинация',
     'nominee.created': 'Добавлен номинант', 'nominee.updated': 'Изменён номинант', 'nominee.deleted': 'Удалён номинант',
     'invitation.created': 'Создано приглашение', 'invitation.revoked': 'Отозвано приглашение',
-    'invitation.redeemed': 'Активировано приглашение', 'invitation.reissued': 'Повторно выдан код', 'media.uploaded': 'Загружено изображение',
+    'invitation.redeemed': 'Активировано приглашение', 'invitation.reissued': 'Повторно выдан код', 'media.uploaded': 'Загружен медиафайл',
 };
 let viewer;
 let visible = [];
@@ -79,9 +79,11 @@ async function loadOverview(_operator, signal) {
     return el('section', { class: 'page-stack' },
         heading('Обзор', 'Каталог, участники и голосование', pageHref('Управлять голосованием', 'voting', 'primary')),
         el('div', { class: 'stat-grid' },
-            statCard('Бюллетени', votes),
             statCard('Пользователи', stats.users),
+            statCard('Голоса', votes),
+            statCard('Проголосовавшие', stats.voters),
             statCard('Номинации', stats.nominations),
+            statCard('Жюри', stats.jurors),
             statCard('Активные коды', stats.invitations_active)),
         el('div', { class: 'dashboard-grid' },
             el('div', { class: 'page-stack' },

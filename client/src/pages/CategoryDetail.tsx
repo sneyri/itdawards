@@ -32,6 +32,7 @@ import { fetchResults } from '../lib/awardsApi'
 import type { ResultEntry } from '../lib/awardsApi'
 import { formatNumber, pluralize } from '../lib/format'
 import { NotFound } from './NotFound'
+import { JuryReview } from '../components/JuryReview'
 
 function shuffleNominees(nominees: Nominee[]): Nominee[] {
   const result = [...nominees]
@@ -76,6 +77,9 @@ function CategoryView({ category }: { category: Category }) {
   const orderedNominees = trackOrder
     ? [...category.nominees].sort((first, second) => trackOrder.indexOf(first.id) - trackOrder.indexOf(second.id))
     : category.nominees
+  const fewNomineesClass = orderedNominees.length > 0 && orderedNominees.length < 4
+    ? ` nominee-list--few-${orderedNominees.length}`
+    : ''
   const canVote = category.canVote && category.nominees.length > 0
   const editing = canVote && (!saved || (voting.allowVoteChanges && changing))
   const selectedId = editing ? draft : savedPick
@@ -261,7 +265,7 @@ function CategoryView({ category }: { category: Category }) {
             </div>
 
             <div className="vote-layout__cards">
-              <div className="nominee-list">
+              <div className={`nominee-list${fewNomineesClass}`}>
                 {orderedNominees.map((nomineeItem, index) => {
                   const isSelected = selectedId === nomineeItem.id
                   return (
@@ -293,12 +297,6 @@ function CategoryView({ category }: { category: Category }) {
                 <div className="vote-panel__head">
                   <p className="eyebrow">Ваш голос</p>
                 </div>
-{/* 
-                <div className="jury-review">
-                  <h2 className='jury-review__header'>Что можете сказать об номинации {category.title}?</h2>
-                  <input type="text" placeholder={'Ваш отзыв'} className='jury-review' />
-                  <button className='jury-review__button'>заказать</button>
-                </div> */}
 
                 <h2 id="vote-panel-title">
                   {saved && !editing ? 'Голос учтён' : editing ? 'Сделайте выбор' : status}
@@ -389,6 +387,7 @@ function CategoryView({ category }: { category: Category }) {
               </strong>
             </Link>
           </nav>
+          <JuryReview categoryId={category.apiId} categoryTitle={category.title} />
         </div>
       </section>
 

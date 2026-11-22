@@ -138,12 +138,12 @@ export function Home() {
             <div className="hero__deadline">
               <div className="hero__deadline-label">
                 <Clock3 size={18} aria-hidden="true" />
-                <span>
-                  {deadline && voting.open ? 'До закрытия голосования' : 'Голосование'}
-                  <small>{voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'}</small>
-                </span>
+                <span>{deadline && voting.open ? 'До закрытия голосования' : 'Голосование'}</span>
               </div>
               {voting.open && voting.endsAt && deadline && <Countdown target={voting.endsAt} />}
+              <small className="hero__deadline-date">
+                {voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'}
+              </small>
             </div>
           </div>
 
@@ -181,7 +181,7 @@ export function Home() {
           <Reveal delay={80}>
             <p className="intro__copy">
               ITD AWARDS — первая премия сообщества. Здесь мы говорим «спасибо»
-              тем, кто наполнял ленту, эфиры и чаты. Побеждают не по количеству
+              тем, кто наполнял ленту. Побеждают не по количеству
               подписчиков, а по тому, кого действительно помнит сообщество.
             </p>
             <div className="stat-strip">

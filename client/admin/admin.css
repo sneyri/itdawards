@@ -52,6 +52,12 @@
 .admin :is(input:not([type="checkbox"]),textarea) { background: var(--deep); border-color: var(--line-gold); border-radius: 8px; }
 .admin .field { display: grid; gap: 6px; min-width: 0; align-content: start; color: var(--text); font-size: 14px; }
 .admin .filters > .field { flex: 1 1 9rem; }
+.admin .file-drop { display: grid; gap: 6px; justify-items: center; padding: 14px; border: 1px dashed var(--line-gold); border-radius: 8px; background: var(--deep); color: var(--muted); text-align: center; cursor: pointer; }
+.admin .file-drop.is-dragging { border-color: var(--gold); background: #222535; color: var(--text); }
+.admin .file-drop__input { position: absolute; width: 1px !important; height: 1px; min-height: 1px !important; padding: 0 !important; opacity: 0; overflow: hidden; clip: rect(0, 0, 0, 0); }
+.admin .file-drop:focus-within { outline: 2px solid var(--gold); outline-offset: 2px; }
+.admin .file-drop__message { max-width: 100%; overflow-wrap: anywhere; color: var(--text); font-size: 12px; }
+.admin .file-drop__message.is-error { color: var(--danger); }
 .admin .select-trigger { width: 100%; min-width: 0; justify-content: space-between; text-align: left; background: var(--deep); color: var(--text); }
 .admin .select-trigger::after { content: ''; width: 7px; height: 7px; border: solid var(--muted); border-width: 0 1px 1px 0; transform: rotate(45deg); margin: 0 3px 3px 0; flex-shrink: 0; }
 .select-menu { position: fixed; margin: 0; inset: auto; padding: 4px; overflow-y: auto; border: 1px solid var(--line-gold); border-radius: 8px; background: var(--sidebar); color: var(--text); box-shadow: 0 8px 20px #0006; }

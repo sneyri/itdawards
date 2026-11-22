@@ -1,22 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, CSSProperties } from 'react'
-import { Pause, Play } from 'lucide-react'
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 
 type TrackPlayerProps = {
   src: string
   title: string
-}
-
-function makeBars(seed: string): number[] {
-  let hash = 2166136261
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return Array.from({ length: 40 }, (_, index) => {
-    const value = Math.abs(Math.sin((hash + index * 47) * 0.013))
-    return 24 + Math.round(value * 68)
-  })
 }
 
 function formatTime(value: number): string {
@@ -28,11 +16,13 @@ function formatTime(value: number): string {
 
 export function TrackPlayer({ src, title }: TrackPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const previousVolumeRef = useRef(1)
   const [playing, setPlaying] = useState(false)
   const [current, setCurrent] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [volume, setVolume] = useState(100)
+  const [muted, setMuted] = useState(false)
   const [failed, setFailed] = useState(false)
-  const bars = makeBars(title)
 
   useEffect(() => {
     const audio = audioRef.current
@@ -47,6 +37,10 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
       setCurrent(0)
       audio.currentTime = 0
     }
+    const onVolumeChange = () => {
+      setVolume(Math.round(audio.volume * 100))
+      setMuted(audio.muted)
+    }
     const onError = () => {
       setFailed(true)
       setPlaying(false)
@@ -58,6 +52,7 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
     audio.addEventListener('play', onPlay)
     audio.addEventListener('pause', onPause)
     audio.addEventListener('ended', onEnded)
+    audio.addEventListener('volumechange', onVolumeChange)
     audio.addEventListener('error', onError)
 
     return () => {
@@ -67,9 +62,21 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('pause', onPause)
       audio.removeEventListener('ended', onEnded)
+      audio.removeEventListener('volumechange', onVolumeChange)
       audio.removeEventListener('error', onError)
     }
   }, [])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.pause()
+    audio.currentTime = 0
+    setCurrent(0)
+    setDuration(0)
+    setFailed(false)
+    audio.load()
+  }, [src])
 
   useEffect(() => {
     const pauseOther = (event: Event) => {
@@ -99,13 +106,34 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
   const seek = (event: ChangeEvent<HTMLInputElement>) => {
     const audio = audioRef.current
     const next = Number(event.target.value)
+    if (!audio || !Number.isFinite(next) || duration <= 0) return
+    audio.currentTime = Math.max(0, Math.min(next, duration))
+    setCurrent(audio.currentTime)
+  }
+
+  const changeVolume = (event: ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current
+    const next = Number(event.target.value)
+    if (!audio || !Number.isFinite(next)) return
+    const normalized = Math.max(0, Math.min(100, next)) / 100
+    if (normalized > 0) previousVolumeRef.current = normalized
+    audio.volume = normalized
+    audio.muted = normalized === 0
+  }
+
+  const toggleMute = () => {
+    const audio = audioRef.current
     if (!audio) return
-    audio.currentTime = next
-    setCurrent(next)
+    if (audio.muted || audio.volume === 0) {
+      audio.volume = previousVolumeRef.current || 1
+      audio.muted = false
+    } else {
+      previousVolumeRef.current = audio.volume
+      audio.muted = true
+    }
   }
 
   const progress = duration > 0 ? Math.min(100, (current / duration) * 100) : 0
-  const playedBars = Math.round((progress / 100) * bars.length)
 
   return (
     <div className={`track-player ${failed ? 'has-error' : ''}`} role="group" aria-label={`Аудиофрагмент: ${title}`}>
@@ -120,15 +148,6 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
         {playing ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
       </button>
       <div className="track-player__main">
-        <span className="track-player__wave" aria-hidden="true">
-          {bars.map((height, index) => (
-            <span
-              key={index}
-              className={index < playedBars ? 'is-played' : ''}
-              style={{ height: `${height}%` }}
-            />
-          ))}
-        </span>
         <input
           type="range"
           className="track-player__range"
@@ -144,6 +163,28 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
         <span className="track-player__meta">
           <span>{formatTime(current)}</span>
           <span>{failed ? 'аудио недоступно' : formatTime(duration)}</span>
+        </span>
+        <span className="track-player__volume">
+          <button
+            type="button"
+            className="track-player__mute"
+            onClick={toggleMute}
+            aria-label={muted ? `Включить звук: ${title}` : `Выключить звук: ${title}`}
+          >
+            {muted || volume === 0 ? <VolumeX size={14} /> : <Volume2 size={14} />}
+          </button>
+          <input
+            type="range"
+            className="track-player__volume-range"
+            min={0}
+            max={100}
+            step={1}
+            value={volume}
+            onChange={changeVolume}
+            aria-label={`Громкость: ${title}`}
+            style={{ '--volume-progress': `${volume}%` } as CSSProperties}
+          />
+          <span className="track-player__volume-value">{volume}%</span>
         </span>
       </div>
     </div>

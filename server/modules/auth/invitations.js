@@ -1,7 +1,7 @@
 import pool, { transaction } from '../../database/db.js';
 import { sendError } from '../../middleware/errorHandler.js';
 import { codeSecret } from '../../config.js';
-import { CODE_TTL_SECONDS, loginCodeCooldown, storeLoginCode } from './loginCodes.js';
+import { loginCodeCooldown, storeLoginCode } from './loginCodes.js';
 
 const invitationRoles = ['USER', 'JURY'];
 const managerRoles = ['MANAGER', 'SUPERADMIN'];
@@ -12,7 +12,8 @@ const invitationDetails = `SELECT i.id, i.role, i.created_at, i.expires_at, i.ma
     CASE WHEN i.revoked_at IS NOT NULL THEN 'revoked'
         WHEN i.use_count >= i.max_uses THEN 'used'
         WHEN code.used_at IS NOT NULL THEN 'revoked'
-        WHEN i.account_id IS NULL OR i.expires_at <= clock_timestamp() THEN 'expired' ELSE 'active' END AS status
+        WHEN i.account_id IS NULL OR (i.expires_at IS NOT NULL AND i.expires_at <= clock_timestamp())
+        THEN 'expired' ELSE 'active' END AS status
     FROM invitation_codes i JOIN users creator ON creator.id = i.creator_id
     LEFT JOIN auth_codes code ON code.user_id = i.account_id AND code.invitation_id = i.id`;
 
@@ -48,26 +49,19 @@ async function invitationById(client, invitationId) {
 async function issueInvitation(client, actorId, user, action) {
     const { rows: [invitation] } = await client.query(`
         INSERT INTO invitation_codes (account_id, role, creator_id, expires_at, max_uses, created_at)
-        VALUES ($1, $2, $3, statement_timestamp() + make_interval(secs => $4), 1, statement_timestamp())
+        VALUES ($1, $2, $3, NULL, 1, statement_timestamp())
         RETURNING id
-    `, [user.id, user.role, actorId, CODE_TTL_SECONDS]);
+    `, [user.id, user.role, actorId]);
     const { code } = await storeLoginCode(client, user.id, invitation.id);
-    await client.query(`
-        UPDATE invitation_codes AS invitation SET expires_at = code.expires_at
-        FROM auth_codes AS code WHERE invitation.id = $1 AND code.invitation_id = invitation.id
-    `, [invitation.id]);
     await auditInvitation(client, actorId, action, invitation.id, { userId: user.id, role: user.role });
     return { ...await invitationById(client, invitation.id), code };
 }
 
 async function issueInvitations(req, res, count, bulk) {
     if (!codeSecret) return sendError(res, 503, 'auth_unavailable', 'Вход пока недоступен.');
-    const { role, displayName, expiresAt, maxUses = 1 } = req.body ?? {};
+    const { role, displayName, maxUses = 1 } = req.body ?? {};
     if (!invitationRoles.includes(role)) return sendError(res, 400, 'invalid_input', 'Укажите роль участника или жюри.');
     if (maxUses !== 1) return sendError(res, 400, 'invalid_input', 'Используйте один код на одного пользователя.');
-    if (expiresAt !== undefined && (typeof expiresAt !== 'string' || !(Date.parse(expiresAt) > Date.now()))) {
-        return sendError(res, 400, 'invalid_input', 'Дата окончания должна быть в будущем.');
-    }
     const name = typeof displayName === 'string' ? displayName.trim() : '';
     if (displayName !== undefined && (!name || name.includes('\0') || [...name].length > 120 || bulk)) {
         return sendError(res, 400, 'invalid_input', 'Укажите имя приглашённого длиной до 120 символов.');
@@ -120,7 +114,7 @@ export async function reissueInvitation(req, res) {
 
         await client.query(`
             UPDATE invitation_codes SET revoked_at = clock_timestamp()
-            WHERE account_id = $1 AND use_count = 0 AND revoked_at IS NULL AND expires_at > clock_timestamp()
+            WHERE account_id = $1 AND use_count = 0 AND revoked_at IS NULL
         `, [user.id]);
         return { invitation: await issueInvitation(client, req.user.id, user, 'invitation.reissued') };
     });
