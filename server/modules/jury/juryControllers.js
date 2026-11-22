@@ -1,15 +1,11 @@
 import pool from '../../database/db.js';
 import { sendError } from '../../middleware/errorHandler.js';
 
-export function test(req, res){
-    res.json({"status": "ok", "разраб": 200, "хыхыхы": "ыхыххыыхыхыххыых"})
-}
-
 export async function createJuryReview(req, res) {
     const nominationId = req.body?.nomination_id;
     const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
     if (!Number.isSafeInteger(nominationId) || nominationId < 1
-        || !content || [...content].length > 256) {
+        || !content || content.includes('\0') || [...content].length > 256) {
         return sendError(res, 400, 'invalid_review', 'Отзыв должен содержать от 1 до 256 символов и относиться к существующей номинации.');
     }
 
