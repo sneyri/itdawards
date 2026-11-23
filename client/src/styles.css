@@ -5779,3 +5779,6 @@ main:focus {
     text-align: center;
   }
 }
+
+.nominations-poster { margin-left: auto; }
+@media (max-width: 800px) { .nominations-poster { margin-left: 0; } }

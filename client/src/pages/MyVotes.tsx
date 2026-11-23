@@ -1,11 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
   ArrowUpRight,
   Check,
-  Download,
-  ImageDown,
   Pencil,
   Vote,
 } from 'lucide-react'
@@ -14,10 +12,8 @@ import { CategoryIcon } from '../components/CategoryIcon'
 import { NomineeArtwork } from '../components/NomineeArtwork'
 import { groupLabels } from '../data/categories'
 import { useVotes } from '../context/VotesContext'
-import { useToast } from '../context/ToastContext'
-import { useMediaQuery } from '../hooks/useMediaQuery'
 import { usePageTitle } from '../hooks/usePageTitle'
-import { createVotesPoster } from '../lib/votesPoster'
+import { PosterButton } from '../components/PosterButton'
 import { AuthAction } from '../components/AuthAction'
 import { fetchMyVotes } from '../lib/awardsApi'
 import type { MyVote } from '../lib/awardsApi'
@@ -25,9 +21,6 @@ import type { MyVote } from '../lib/awardsApi'
 export function MyVotes() {
   usePageTitle('Мой голос')
   const { categories, auth, voting } = useVotes()
-  const { showToast } = useToast()
-  const downloadOnly = useMediaQuery('(max-width: 720px)')
-  const [copying, setCopying] = useState(false)
   const [response, setResponse] = useState<{ accountId: string; records: MyVote[] }>()
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
@@ -47,62 +40,20 @@ export function MyVotes() {
     return () => controller.abort()
   }, [accountId, attempt])
 
-  const downloadPoster = (blob: Blob) => {
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'itd-awards-2026-moy-golos.png'
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-  }
-
-  const handlePoster = async (mode: 'copy' | 'download') => {
-    if (!records?.length || copying) return
-    setCopying(true)
-
-    try {
-      const namesByCategory = new Map(records.map((record) => [record.nomination_id, record.nominee_name]))
-      const ballot = categories.map((category) => ({
-        title: category.title,
-        nomineeName: namesByCategory.get(category.apiId),
-      }))
-      for (const record of records) {
-        if (!categoryById.has(record.nomination_id)) {
-          ballot.push({ title: record.nomination_title, nomineeName: record.nominee_name })
-        }
+  const ballot = useMemo(() => {
+    const byId = new Map(categories.map((category) => [category.apiId, category]))
+    const namesByCategory = new Map(records?.map((record) => [record.nomination_id, record.nominee_name]) ?? [])
+    const entries = categories.map((category) => ({
+      title: category.title,
+      nomineeName: namesByCategory.get(category.apiId),
+    }))
+    for (const record of records ?? []) {
+      if (!byId.has(record.nomination_id)) {
+        entries.push({ title: record.nomination_title, nomineeName: record.nominee_name })
       }
-      const blob = await createVotesPoster(ballot)
-
-      if (mode === 'download' || downloadOnly) {
-        downloadPoster(blob)
-        showToast('PNG с голосами скачан — прикрепите его к посту.', 'info')
-        return
-      }
-
-      const canCopyImage =
-        typeof ClipboardItem !== 'undefined' &&
-        Boolean(navigator.clipboard?.write)
-
-      if (canCopyImage) {
-        try {
-          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-          showToast('Картинка с голосами скопирована. Можно вставлять в пост.')
-        } catch {
-          downloadPoster(blob)
-          showToast('PNG с голосами скачан — прикрепите его к посту.', 'info')
-        }
-      } else {
-        downloadPoster(blob)
-        showToast('PNG с голосами скачан — прикрепите его к посту.', 'info')
-      }
-    } catch {
-      showToast('Не удалось собрать картинку. Попробуйте ещё раз.', 'error')
-    } finally {
-      setCopying(false)
     }
-  }
+    return entries
+  }, [categories, records])
 
   return (
     <div className="my-votes-page">
@@ -140,26 +91,7 @@ export function MyVotes() {
                   <h2 className="display">Уже в списке</h2>
                 </div>
                 <div className="my-votes-head__side">
-                  {!downloadOnly && (
-                    <button
-                      type="button"
-                      className="button button--gold button--sm"
-                      onClick={() => handlePoster('copy')}
-                      disabled={copying}
-                    >
-                      {copying ? 'Собираю…' : 'Скопировать картинкой'}
-                      <ImageDown size={15} aria-hidden="true" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="button button--ghost button--sm"
-                    onClick={() => handlePoster('download')}
-                    disabled={copying}
-                  >
-                    {copying ? 'Собираю…' : 'Скачать картинку'}
-                    <Download size={15} aria-hidden="true" />
-                  </button>
+                  <PosterButton ballot={ballot} disabled={!records?.length} />
                   <span className="my-votes-head__deadline">
                     Все {categories.length} номинаций — в одном PNG для поста
                   </span>

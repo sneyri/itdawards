@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, SearchX } from 'lucide-react'
 import { PageHero } from '../components/PageHero'
+import { PosterButton } from '../components/PosterButton'
 import { SearchField } from '../components/SearchField'
 import { CategoryRow } from '../components/CategoryRow'
 import { useVotes } from '../context/VotesContext'
@@ -17,7 +18,7 @@ const filterLabels: Record<Filter, string> = {
 
 export function Nominations() {
   usePageTitle('Номинации')
-  const { categories, votes, voting } = useVotes()
+  const { categories, votes, voteNames, voting } = useVotes()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
 
@@ -29,6 +30,14 @@ export function Nominations() {
       unvoted: categories.length - voted,
     }
   }, [categories, votes])
+
+  const ballot = useMemo(() => categories.map((categoryItem) => {
+    const nomineeId = votes[categoryItem.id]
+    return {
+      title: categoryItem.title,
+      nomineeName: categoryItem.nominees.find((item) => item.id === nomineeId)?.name ?? voteNames[categoryItem.id],
+    }
+  }), [categories, votes, voteNames])
 
   const filteredCategories = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('ru')
@@ -98,6 +107,9 @@ export function Nominations() {
                   <span className="chip__count">{filterCounts[filterKey]}</span>
                 </button>
               ))}
+            </div>
+            <div className="nominations-poster">
+              <PosterButton ballot={ballot} disabled={!filterCounts.voted} />
             </div>
           </div>
 
