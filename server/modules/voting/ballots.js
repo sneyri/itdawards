@@ -38,7 +38,7 @@ export async function postVote(req, res) {
     return res.status(201).json({ data: { nomination_id: nominationId, nominee_id: nomineeId } });
 }
 
-async function saveVote(client, nominationId, nomineeId, userId) {
+export async function saveVote(client, nominationId, nomineeId, userId) {
     const { rows: [user] } = await client.query('SELECT role, blocked FROM users WHERE id = $1 FOR UPDATE', [userId]);
     if (!user || user.blocked) return 'login_required';
     // Lock settings before the catalog rows so voting and admin changes use the same order.
@@ -66,7 +66,9 @@ async function saveVote(client, nominationId, nomineeId, userId) {
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (user_id, nomination_id) DO UPDATE SET
             nominee_id = EXCLUDED.nominee_id,
-            updated_at = CASE WHEN votes.nominee_id <> EXCLUDED.nominee_id THEN now() ELSE votes.updated_at END
+            updated_at = CASE WHEN votes.nominee_id <> EXCLUDED.nominee_id THEN now() ELSE votes.updated_at END,
+            voter_role = votes.voter_role,
+            weight = votes.weight
         WHERE $6::boolean
     `, [userId, nominationId, nomineeId, user.role, weight, settings.allow_vote_changes]);
     return result.rowCount ? 'saved' : 'already_voted';

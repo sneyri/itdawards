@@ -1,6 +1,6 @@
 import express from 'express';
 import api from './routes/api.js';
-import pages from './modules/pages/pagesRoutes.js';
+import pages from './modules/pages/pages.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { securityHeaders } from './middleware/security.js';
 import { rememberSystemError } from './modules/monitoring/system.js';
