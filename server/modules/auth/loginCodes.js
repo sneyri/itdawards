@@ -19,8 +19,14 @@ export function hashCode(code) {
 
 export async function storeLoginCode(client, userId, invitationId = null, ttlSeconds = CODE_TTL_SECONDS) {
     // Callers lock the account row before checking cooldown and replacing a code.
-    // The 32-character alphabet divides the possible byte values evenly.
-    const code = Array.from(randomBytes(CODE_LENGTH), (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join('');
+    let code = '';
+    while (code.length < CODE_LENGTH) {
+        for (const byte of randomBytes(CODE_LENGTH - code.length)) {
+            if (byte >= 240) continue;
+            code += CODE_ALPHABET[byte % CODE_ALPHABET.length];
+            if (code.length === CODE_LENGTH) break;
+        }
+    }
     await client.query(`
         INSERT INTO auth_codes (user_id, code_hash, issued_at, expires_at, invitation_id)
         VALUES ($1, $2, statement_timestamp(),

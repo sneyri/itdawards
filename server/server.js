@@ -26,8 +26,9 @@ server.once('error', async (error) => {
     await pool.end();
 });
 
-function stop() {
-    server.close(() => pool.end());
+async function stop() {
+    await new Promise((resolve) => server.close(resolve));
+    await pool.end();
 }
 process.once('SIGINT', stop);
 process.once('SIGTERM', stop);

@@ -1,8 +1,9 @@
-import { Router } from "express";
-import { health } from "./statusController.js";
+import { Router } from 'express';
 
 const router = Router();
 
-router.get('', health)
+router.get('', (_req, res) => {
+    return res.status(200).json({ status: 'заебок' });
+});
 
 export default router;
