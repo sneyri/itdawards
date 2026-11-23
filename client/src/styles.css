@@ -5782,3 +5782,5 @@ main:focus {
 
 .nominations-poster { margin-left: auto; }
 @media (max-width: 800px) { .nominations-poster { margin-left: 0; } }
+.nominations-toolbar__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.nominations-toolbar__row .nominations-poster { margin-left: 0; }

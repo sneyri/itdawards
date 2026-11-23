@@ -94,7 +94,8 @@ export function Nominations() {
         <div className="container">
           <div className="nominations-toolbar">
             <SearchField value={query} onChange={setQuery} label="Найти номинацию" />
-            <div className="filter-group" role="group" aria-label="Фильтр номинаций">
+            <div className="nominations-toolbar__row">
+              <div className="filter-group" role="group" aria-label="Фильтр номинаций">
               {(Object.keys(filterLabels) as Filter[]).map((filterKey) => (
                 <button
                   type="button"
@@ -107,9 +108,10 @@ export function Nominations() {
                   <span className="chip__count">{filterCounts[filterKey]}</span>
                 </button>
               ))}
-            </div>
-            <div className="nominations-poster">
-              <PosterButton ballot={ballot} disabled={!filterCounts.voted} />
+              </div>
+              <div className="nominations-poster">
+                <PosterButton ballot={ballot} disabled={!filterCounts.voted} />
+              </div>
             </div>
           </div>
 
