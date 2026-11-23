@@ -95,9 +95,10 @@ export async function getAdminJuryVotes(req, res) {
         pool.query(`
             SELECT n.id AS nomination_id, n.title AS nomination_title,
                 nominee.id AS nominee_id, nominee.name AS nominee_name,
-                v.justification, v.updated_at
+                v.justification, v.updated_at, jury.display_name AS author_name
             FROM jury_votes v
             JOIN nominations n ON n.id = v.nomination_id
+            JOIN users jury ON jury.id = v.jury_id
             JOIN nominees nominee ON nominee.nomination_id = v.nomination_id AND nominee.id = v.nominee_id
             WHERE ($1::integer IS NULL OR n.id = $1)
             ORDER BY n.sort_order, n.id, v.updated_at DESC
@@ -105,9 +106,10 @@ export async function getAdminJuryVotes(req, res) {
         pool.query(`
             SELECT n.id AS nomination_id, n.title AS nomination_title,
                 NULL::integer AS nominee_id, NULL::text AS nominee_name,
-                review.content AS justification, review.created_at
+                review.content AS justification, review.created_at, jury.display_name AS author_name
             FROM jury_reviews review
             JOIN nominations n ON n.id = review.nomination_id
+            JOIN users jury ON jury.id = review.jury_id
             WHERE ($1::integer IS NULL OR n.id = $1)
             ORDER BY n.sort_order, n.id, review.created_at DESC
         `, [nominationId]),

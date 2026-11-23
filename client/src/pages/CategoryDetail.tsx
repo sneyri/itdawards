@@ -58,6 +58,8 @@ export function CategoryDetail() {
 
 function CategoryView({ category }: { category: Category }) {
   const { categories, votes, voteNames, saveVote, auth, voting } = useVotes()
+  const isJury = auth.user?.role === 'JURY'
+  const [juryNomineeId, setJuryNomineeId] = useState('')
   const { showToast } = useToast()
   const location = useLocation()
   const navigate = useNavigate()
@@ -267,16 +269,16 @@ function CategoryView({ category }: { category: Category }) {
             <div className="vote-layout__cards">
               <div className={`nominee-list${fewNomineesClass}`}>
                 {orderedNominees.map((nomineeItem, index) => {
-                  const isSelected = selectedId === nomineeItem.id
+                  const isSelected = isJury ? juryNomineeId === nomineeItem.id : selectedId === nomineeItem.id
                   return (
                     <NomineeCard
                       key={nomineeItem.id}
                       nominee={nomineeItem}
                       categoryId={category.id}
                       selected={isSelected}
-                      editing={editing && !saving}
+                      editing={isJury || (editing && !saving)}
                       index={index}
-                      onToggle={() => toggleNominee(nomineeItem.id)}
+                      onToggle={() => isJury ? setJuryNomineeId(nomineeItem.id) : toggleNominee(nomineeItem.id)}
                       onOpenLightbox={() => openLightbox(nomineeItem.id)}
                       buttonRef={index === 0 ? firstNomineeRef : undefined}
                     />
@@ -285,15 +287,15 @@ function CategoryView({ category }: { category: Category }) {
               </div>
 
               {category.nominees.length === 0 && <p>Номинанты пока не добавлены.</p>}
-              {editing && (
+              {(editing || isJury) && (
                 <p className="nominee-list__note">
                   Нажмите на карточку, чтобы отметить выбор.
                 </p>
               )}
             </div>
 
-            <div className={`vote-panels${auth.user?.role === 'JURY' ? ' vote-panels--jury' : ''}`}>
-              <aside className="vote-panel" aria-labelledby="vote-panel-title">
+            <div className={`vote-panels${isJury ? ' vote-panels--jury vote-panels--jury-only' : ''}`}>
+              {!isJury && <aside className="vote-panel" aria-labelledby="vote-panel-title">
                 <div className="vote-panel__intro">
                   <div className="vote-panel__head">
                     <p className="eyebrow">Ваш голос</p>
@@ -353,11 +355,13 @@ function CategoryView({ category }: { category: Category }) {
                     </button>
                   )}
                 </div>
-              </aside>
-              {auth.user?.role === 'JURY' && (
+              </aside>}
+              {isJury && (
                 <JuryReview
                   categoryId={category.apiId}
                   nominees={category.nominees.map(({ id, name }) => ({ id, name }))}
+                  nomineeId={juryNomineeId}
+                  onNomineeChange={setJuryNomineeId}
                 />
               )}
             </div>

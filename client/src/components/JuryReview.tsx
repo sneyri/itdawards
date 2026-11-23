@@ -15,12 +15,13 @@ type JuryVote = {
 type JuryReviewProps = {
   categoryId: number
   nominees: Array<{ id: string; name: string }>
+  nomineeId: string
+  onNomineeChange: (id: string) => void
 }
 
-export function JuryReview({ categoryId, nominees }: JuryReviewProps) {
+export function JuryReview({ categoryId, nominees, nomineeId, onNomineeChange }: JuryReviewProps) {
   const { auth } = useVotes()
   const [vote, setVote] = useState<JuryVote | null>(null)
-  const [nomineeId, setNomineeId] = useState('')
   const [justification, setJustification] = useState('')
   const [editing, setEditing] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -35,7 +36,7 @@ export function JuryReview({ categoryId, nominees }: JuryReviewProps) {
     request<JuryVote | null>(`/jury/votes/${categoryId}`, { signal: controller.signal })
       .then((savedVote) => {
         setVote(savedVote)
-        setNomineeId(savedVote ? String(savedVote.nominee_id) : '')
+        onNomineeChange(savedVote ? String(savedVote.nominee_id) : '')
         setJustification(savedVote?.justification ?? '')
       })
       .catch((reason) => {
@@ -46,7 +47,7 @@ export function JuryReview({ categoryId, nominees }: JuryReviewProps) {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [auth.user?.role, categoryId, reload])
+  }, [auth.user?.role, categoryId, reload, onNomineeChange])
 
   if (auth.user?.role !== 'JURY') return null
 
@@ -78,7 +79,7 @@ export function JuryReview({ categoryId, nominees }: JuryReviewProps) {
         }),
       })
       setVote({ ...savedVote, nominee_name: nominees.find((nominee) => nominee.id === nomineeId)?.name })
-      setNomineeId(String(savedVote.nominee_id))
+      onNomineeChange(String(savedVote.nominee_id))
       setJustification(savedVote.justification)
       setEditing(false)
     } catch (reason) {
@@ -89,14 +90,14 @@ export function JuryReview({ categoryId, nominees }: JuryReviewProps) {
   }
 
   function beginEdit() {
-    setNomineeId(vote ? String(vote.nominee_id) : '')
+    onNomineeChange(vote ? String(vote.nominee_id) : '')
     setJustification(vote?.justification ?? '')
     setError('')
     setEditing(true)
   }
 
   function cancelEdit() {
-    setNomineeId(vote ? String(vote.nominee_id) : '')
+    onNomineeChange(vote ? String(vote.nominee_id) : '')
     setJustification(vote?.justification ?? '')
     setError('')
     setEditing(false)
@@ -147,25 +148,11 @@ export function JuryReview({ categoryId, nominees }: JuryReviewProps) {
         </>
       )}
       {!loading && !loadError && (!vote || editing) && (
-        <form className="jury-vote__form" onSubmit={submitVote}>
-          <label className="jury-vote__field" htmlFor={`jury-nominee-${categoryId}`}>
-            Номинант
-            <select
-              id={`jury-nominee-${categoryId}`}
-              value={nomineeId}
-              onChange={(event) => setNomineeId(event.target.value)}
-              disabled={pending}
-              required
-            >
-              <option value="" disabled>Выберите номинанта</option>
-              {vote && !nominees.some((nominee) => nominee.id === String(vote.nominee_id)) && (
-                <option value={String(vote.nominee_id)}>{savedNomineeName}</option>
-              )}
-              {nominees.map((nominee) => (
-                <option key={nominee.id} value={nominee.id}>{nominee.name}</option>
-              ))}
-            </select>
-          </label>
+        <form className="jury-vote__form jury-vote__form--centered" onSubmit={submitVote}>
+          <div className="jury-vote__choice">
+            <span className="jury-vote__choice-label">Номинант</span>
+            <strong>{selectedNominee?.name ?? 'Выберите номинанта на карточке выше'}</strong>
+          </div>
           <label className="jury-vote__field" htmlFor={`jury-justification-${categoryId}`}>
             Обоснование выбора
             <textarea

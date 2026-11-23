@@ -231,9 +231,10 @@ async function loadJuryVotes(_operator, signal) {
         results.replaceChildren(...result.nominations.map(nomination => {
             const counts = result.counts.filter(row => row.nomination_id === nomination.id);
             const ballots = result.votes.filter(row => row.nomination_id === nomination.id)
-                .map(row => [row.nominee_name, row.justification, row.updated_at ? time(row.updated_at) : '—']);
+                .map(row => [row.nominee_name, row.author_name || '—', row.justification,
+                    row.updated_at ? time(row.updated_at) : '—']);
             const legacy = result.legacy_reviews.filter(row => row.nomination_id === nomination.id)
-                .map(row => ['Старый отзыв (без выбранного номинанта)', row.justification,
+                .map(row => ['Старый отзыв (без выбранного номинанта)', row.author_name || '—', row.justification,
                     row.created_at ? time(row.created_at) : '—']);
             return el('section', { class: 'panel jury-votes__nomination' },
                 el('h2', {}, nomination.title),
@@ -241,7 +242,7 @@ async function loadJuryVotes(_operator, signal) {
                 table(['Номинант', 'Голосов'], counts.map(row => [row.nominee_name, numeric(row.vote_count)]),
                     'В этой номинации пока нет номинантов.'),
                 el('h3', {}, 'Голоса и обоснования'),
-                table(['Номинант', 'Обоснование выбора', 'Дата изменения / отправки'], [...ballots, ...legacy],
+                table(['Номинант', 'Автор', 'Обоснование выбора', 'Дата изменения / отправки'], [...ballots, ...legacy],
                     'Голосов и старых отзывов пока нет.'));
         }));
     }

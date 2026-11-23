@@ -3373,6 +3373,45 @@ main:focus {
   gap: 16px;
 }
 
+.vote-panels--jury-only {
+  grid-template-columns: minmax(0, 720px);
+  justify-content: center;
+}
+
+.jury-vote {
+  width: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.jury-vote__form--centered {
+  justify-items: center;
+  text-align: center;
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.jury-vote__form--centered > :is(.jury-vote__field, .jury-vote__choice, .jury-vote__footer) {
+  width: 100%;
+}
+
+.jury-vote__choice {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line-gold);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.jury-vote__choice-label {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .vote-panels--jury > .vote-panel {
   width: 100%;
   max-width: none;

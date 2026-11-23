@@ -58,7 +58,7 @@ export function MyVotes() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
-  const copyPoster = async () => {
+  const handlePoster = async (mode: 'copy' | 'download') => {
     if (!records?.length || copying) return
     setCopying(true)
 
@@ -75,7 +75,7 @@ export function MyVotes() {
       }
       const blob = await createVotesPoster(ballot)
 
-      if (downloadOnly) {
+      if (mode === 'download' || downloadOnly) {
         downloadPoster(blob)
         showToast('PNG с голосами скачан — прикрепите его к посту.', 'info')
         return
@@ -140,22 +140,25 @@ export function MyVotes() {
                   <h2 className="display">Уже в списке</h2>
                 </div>
                 <div className="my-votes-head__side">
+                  {!downloadOnly && (
+                    <button
+                      type="button"
+                      className="button button--gold button--sm"
+                      onClick={() => handlePoster('copy')}
+                      disabled={copying}
+                    >
+                      {copying ? 'Собираю…' : 'Скопировать картинкой'}
+                      <ImageDown size={15} aria-hidden="true" />
+                    </button>
+                  )}
                   <button
                     type="button"
-                    className="button button--gold button--sm"
-                    onClick={copyPoster}
+                    className="button button--ghost button--sm"
+                    onClick={() => handlePoster('download')}
                     disabled={copying}
                   >
-                    {downloadOnly ? (
-                      <Download size={15} aria-hidden="true" />
-                    ) : (
-                      <ImageDown size={15} aria-hidden="true" />
-                    )}
-                    {copying
-                      ? 'Собираю картинку…'
-                      : downloadOnly
-                        ? 'Скачать картинку'
-                        : 'Скопировать картинкой'}
+                    {copying ? 'Собираю…' : 'Скачать картинку'}
+                    <Download size={15} aria-hidden="true" />
                   </button>
                   <span className="my-votes-head__deadline">
                     Все {categories.length} номинаций — в одном PNG для поста
