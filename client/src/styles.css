@@ -6053,3 +6053,44 @@ main:focus {
 .nominee--polaroid.is-selected .nominee__media {
   border-color: #fff;
 }
+
+
+.nominee.nominee--polaroid,
+.nominee.nominee--polaroid:not(.is-locked):hover,
+.nominee.nominee--polaroid.is-selected {
+  background: #efe9dc;
+  background-color: #efe9dc;
+  border-color: #efe9dc;
+  color: #1a150a;
+}
+
+.nominee.nominee--polaroid:not(.is-locked):hover {
+  transform: rotate(-1deg);
+}
+
+.nominee.nominee--polaroid:nth-child(even):not(.is-locked):hover {
+  transform: rotate(1deg);
+}
+
+.nominee.nominee--polaroid.is-selected {
+  border-color: #fff;
+}
+
+.nominee.nominee--polaroid.is-selected .nominee__media {
+  border-color: #fff;
+  background: #17150f;
+}
+
+
+.nominee.nominee--polaroid .nominee__handle,
+.nominee.nominee--polaroid:hover .nominee__handle,
+.nominee.nominee--polaroid.is-selected .nominee__handle {
+  color: #fff;
+  background: #1a150a;
+  padding: 2px 6px;
+  border-radius: 0;
+}
+
+.nominee.nominee--polaroid.is-selected {
+  border-color: #fff !important;
+}
