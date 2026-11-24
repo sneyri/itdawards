@@ -6094,3 +6094,24 @@ main:focus {
 .nominee.nominee--polaroid.is-selected {
   border-color: #fff !important;
 }
+
+
+.deadline-glitch {
+  cursor: pointer;
+  user-select: none;
+}
+
+.deadline-glitch__letter {
+  display: inline-block;
+}
+
+.deadline-glitch.is-active .deadline-glitch__letter {
+  animation: deadline-hop 0.42s ease both;
+  animation-delay: calc(var(--i) * 70ms);
+}
+
+@keyframes deadline-hop {
+  0% { transform: translateY(0); }
+  45% { transform: translateY(-7px); }
+  100% { transform: translateY(0); }
+}

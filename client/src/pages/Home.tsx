@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -17,6 +17,7 @@ import { useVotes } from '../context/VotesContext'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { CategoryRow } from '../components/CategoryRow'
 import { Countdown } from '../components/Countdown'
+import { DeadlineDate } from '../components/DeadlineDate'
 import { Reveal } from '../components/Reveal'
 
 const featuredIds = [
@@ -43,6 +44,7 @@ export function Home() {
   const tickerItems = useMemo(() => [...categories, ...categories], [categories])
   const deadline = eventDateLabel(voting.endsAt)
   const deadlineText = voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'
+  const [weirdDate] = useState(() => Math.random() < 0.1)
   const ceremony = eventDateLabel(EVENT.ceremonyAt)
   const voteLabel = voting.open
     ? votedCount > 0 ? 'Продолжить голосование' : 'Отдать голос'
@@ -142,11 +144,11 @@ export function Home() {
                 <Clock3 size={18} aria-hidden="true" />
                 <span>
                   {deadline && voting.open ? 'До закрытия голосования' : 'Голосование'}
-                  <small className="hero__deadline-date--inline">{deadlineText}</small>
+                  <DeadlineDate text={deadlineText} weird={weirdDate} className="hero__deadline-date--inline" />
                 </span>
               </div>
               {voting.open && voting.endsAt && deadline && <Countdown target={voting.endsAt} />}
-              <small className="hero__deadline-date--below">{deadlineText}</small>
+              <DeadlineDate text={deadlineText} weird={weirdDate} className="hero__deadline-date--below" />
             </div>
           </div>
 

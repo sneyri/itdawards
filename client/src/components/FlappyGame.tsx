@@ -30,18 +30,24 @@ type GameState = {
   pipes: Pipe[]
   score: number
   over: boolean
+  started: boolean
 }
 
 export function FlappyGame({ onClose }: { onClose: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const stateRef = useRef<GameState>({ y: 0, vy: 0, pipes: [], score: 0, over: false })
+  const stateRef = useRef<GameState>({ y: 0, vy: 0, pipes: [], score: 0, over: false, started: false })
   const [score, setScore] = useState(0)
   const [over, setOver] = useState(false)
+  const [started, setStarted] = useState(false)
   const [round, setRound] = useState(0)
 
   const jump = useCallback(() => {
     const state = stateRef.current
     if (state.over) return
+    if (!state.started) {
+      state.started = true
+      setStarted(true)
+    }
     state.vy = -5.4
   }, [])
 
@@ -58,12 +64,14 @@ export function FlappyGame({ onClose }: { onClose: () => void }) {
     state.pipes = [{ x: width + 40, gapY: height / 2, passed: false }]
     state.score = 0
     state.over = false
+    state.started = false
     setScore(0)
     setOver(false)
+    setStarted(false)
 
     let animation = 0
     const draw = () => {
-      if (!state.over) {
+      if (state.started && !state.over) {
         state.vy += 0.34
         state.y += state.vy
         if (state.y < 14) {
@@ -147,7 +155,9 @@ export function FlappyGame({ onClose }: { onClose: () => void }) {
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <p className="secret-card__hint">Клик по полю или пробел — взмах. Не задень трубы.</p>
+        <p className="secret-card__hint">
+          {started ? 'Клик или пробел — взмах. Не задень трубы.' : 'Кликни по полю или нажми пробел, чтобы начать.'}
+        </p>
         <canvas
           ref={canvasRef}
           width={360}
