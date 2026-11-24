@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import type { Location } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { SecretGames } from './components/SecretGames'
 import { CategoryDetail } from './pages/CategoryDetail'
 import { Home } from './pages/Home'
 import { MyVotes } from './pages/MyVotes'
@@ -31,6 +32,7 @@ export default function App() {
         </Route>
       </Routes>
       {background && <SignIn modal />}
+      <SecretGames />
     </>
   )
 }

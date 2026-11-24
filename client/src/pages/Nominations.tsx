@@ -115,7 +115,7 @@ export function Nominations() {
             </div>
           </div>
 
-          <div className="results-meta" aria-live="polite">
+          <div className="results-meta results-meta--animated" key={`${filter}-${query}`} aria-live="polite">
             <p>
               {filteredCategories.length === 1
                 ? 'Найдена 1 номинация'

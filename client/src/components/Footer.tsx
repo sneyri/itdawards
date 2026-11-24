@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUp, Send } from 'lucide-react'
 import { EVENT } from '../data/event'
@@ -5,6 +6,16 @@ import { telegramChannels, telegramContacts } from '../data/contacts'
 import { Logo } from './Logo'
 
 export function Footer() {
+  const clicks = useRef(0)
+
+  function handleCopyright() {
+    clicks.current += 1
+    if (clicks.current >= 3) {
+      clicks.current = 0
+      window.dispatchEvent(new Event('itd:mines'))
+    }
+  }
+
   return (
     <footer className="site-footer">
       <div className="container">
@@ -50,7 +61,9 @@ export function Footer() {
         </div>
 
         <div className="footer__bottom">
-          <span>© 2026 ITD AWARDS. Сделано сообществом для сообщества.</span>
+          <button type="button" className="footer__copyright" onClick={handleCopyright}>
+            © 2026 ITD AWARDS. Сделано сообществом для сообщества.
+          </button>
           <a href="#top" className="footer__up">
             Наверх
             <ArrowUp size={14} aria-hidden="true" />

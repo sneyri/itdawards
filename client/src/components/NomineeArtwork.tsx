@@ -1,4 +1,4 @@
-import { memo, useId, useState } from 'react'
+import { memo, useEffect, useId, useState } from 'react'
 import type { Nominee } from '../data/categories'
 import { makeInitials } from '../lib/format'
 import { webpSource } from '../lib/imageSource'
@@ -124,7 +124,14 @@ type NomineeArtworkProps = {
 
 export const NomineeArtwork = memo(function NomineeArtwork({ nominee, categoryId, className }: NomineeArtworkProps) {
   const [failedPhoto, setFailedPhoto] = useState<string | null>(null)
+  const [fallbackFailed, setFallbackFailed] = useState(false)
+  useEffect(() => setFallbackFailed(false), [nominee.id])
   const visual = getNomineeVisual(categoryId, nominee, failedPhoto)
+  const fallbackImage = categoryId === 'king-itd'
+    ? '/fallback/king.png'
+    : categoryId === 'queen-itd'
+      ? '/fallback/queen.png'
+      : null
   const classes = ['nominee-art', `nominee-art--${visual}`, className].filter(Boolean).join(' ')
 
   if (visual === 'photo') {
@@ -150,6 +157,18 @@ export const NomineeArtwork = memo(function NomineeArtwork({ nominee, categoryId
   }
 
   if (visual === 'portrait') {
+    if (failedPhoto && fallbackImage && !fallbackFailed) {
+      return (
+        <img
+          className={classes}
+          src={fallbackImage}
+          alt={nominee.photoAlt ?? nominee.name}
+          loading="lazy"
+          draggable={false}
+          onError={() => setFallbackFailed(true)}
+        />
+      )
+    }
     return <Portrait nominee={nominee} className={classes} />
   }
 

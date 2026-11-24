@@ -230,20 +230,39 @@ async function loadJuryVotes(_operator, signal) {
         }
         results.replaceChildren(...result.nominations.map(nomination => {
             const counts = result.counts.filter(row => row.nomination_id === nomination.id);
-            const ballots = result.votes.filter(row => row.nomination_id === nomination.id)
-                .map(row => [row.nominee_name, row.author_name || '—', row.justification,
-                    row.updated_at ? time(row.updated_at) : '—']);
-            const legacy = result.legacy_reviews.filter(row => row.nomination_id === nomination.id)
-                .map(row => ['Старый отзыв (без выбранного номинанта)', row.author_name || '—', row.justification,
-                    row.created_at ? time(row.created_at) : '—']);
+            const rows = [
+                ...result.votes.filter(row => row.nomination_id === nomination.id).map(row => ({
+                    title: row.nominee_name,
+                    author: row.author_name || '—',
+                    text: row.justification,
+                    date: row.updated_at ? time(row.updated_at) : '—',
+                })),
+                ...result.legacy_reviews.filter(row => row.nomination_id === nomination.id).map(row => ({
+                    title: 'Старый отзыв без выбранного номинанта',
+                    author: row.author_name || '—',
+                    text: row.justification,
+                    date: row.created_at ? time(row.created_at) : '—',
+                })),
+            ];
+            const countCards = counts.length
+                ? counts.map(row => el('div', { class: 'jury-count' },
+                    el('strong', {}, row.nominee_name),
+                    el('span', {}, numeric(row.vote_count) + ' голосов')))
+                : [el('p', { class: 'muted' }, 'В этой номинации пока нет номинантов.')];
+            const ballotCards = rows.length
+                ? rows.map(row => el('article', { class: 'jury-ballot' },
+                    el('div', { class: 'jury-ballot__head' },
+                        el('strong', {}, row.title),
+                        el('span', {}, row.date)),
+                    el('p', { class: 'jury-ballot__author' }, 'Автор: ' + row.author),
+                    el('p', { class: 'jury-ballot__text' }, row.text)))
+                : [el('p', { class: 'muted' }, 'Голосов и старых отзывов пока нет.')];
             return el('section', { class: 'panel jury-votes__nomination' },
                 el('h2', {}, nomination.title),
                 el('h3', {}, 'Количество голосов за номинантов'),
-                table(['Номинант', 'Голосов'], counts.map(row => [row.nominee_name, numeric(row.vote_count)]),
-                    'В этой номинации пока нет номинантов.'),
+                el('div', { class: 'jury-counts' }, ...countCards),
                 el('h3', {}, 'Голоса и обоснования'),
-                table(['Номинант', 'Автор', 'Обоснование выбора', 'Дата изменения / отправки'], [...ballots, ...legacy],
-                    'Голосов и старых отзывов пока нет.'));
+                el('div', { class: 'jury-ballots' }, ...ballotCards));
         }));
     }
 

@@ -17,6 +17,7 @@ import { useVotes } from '../context/VotesContext'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { CategoryRow } from '../components/CategoryRow'
 import { Countdown } from '../components/Countdown'
+import { LiveVoters } from '../components/LiveVoters'
 import { Reveal } from '../components/Reveal'
 
 const featuredIds = [
@@ -147,6 +148,7 @@ export function Home() {
               </div>
               {voting.open && voting.endsAt && deadline && <Countdown target={voting.endsAt} />}
               <small className="hero__deadline-date--below">{deadlineText}</small>
+              <LiveVoters />
             </div>
           </div>
 

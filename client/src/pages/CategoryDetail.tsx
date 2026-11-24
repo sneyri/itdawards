@@ -33,6 +33,7 @@ import type { ResultEntry } from '../lib/awardsApi'
 import { formatNumber, pluralize } from '../lib/format'
 import { NotFound } from './NotFound'
 import { JuryReview } from '../components/JuryReview'
+import { EmojiBurst } from '../components/EmojiBurst'
 
 function shuffleNominees(nominees: Nominee[]): Nominee[] {
   const result = [...nominees]
@@ -60,6 +61,7 @@ function CategoryView({ category }: { category: Category }) {
   const { categories, votes, voteNames, saveVote, auth, voting } = useVotes()
   const isJury = auth.user?.role === 'JURY'
   const [juryNomineeId, setJuryNomineeId] = useState('')
+  const [emojiBurst, setEmojiBurst] = useState<{ id: number; emojis: string[] } | null>(null)
   const { showToast } = useToast()
   const location = useLocation()
   const navigate = useNavigate()
@@ -102,10 +104,20 @@ function CategoryView({ category }: { category: Category }) {
     if (index >= 0) setLightboxIndex(index)
   }
 
+  function burstEmojis(nomineeId: string, current: string | undefined) {
+    if (category.id !== 'meme-goda' || nomineeId === current) return
+    const pool = ['😂', '🤣', '😹', '💀', '🔥', '🐸', '👀', '🎭']
+    setEmojiBurst({
+      id: Date.now(),
+      emojis: Array.from({ length: 12 }, () => pool[Math.floor(Math.random() * pool.length)]),
+    })
+  }
+
   const toggleNominee = (nomineeId: string) => {
     if (!editing || saving) return
     setError('')
     setDraft(nomineeId)
+    burstEmojis(nomineeId, draft)
   }
 
   const handleSave = async () => {
@@ -165,6 +177,13 @@ function CategoryView({ category }: { category: Category }) {
 
   return (
     <div className="category-page">
+      {emojiBurst && (
+        <EmojiBurst
+          key={emojiBurst.id}
+          emojis={emojiBurst.emojis}
+          onDone={() => setEmojiBurst(null)}
+        />
+      )}
       <header className="category-head">
         <div className="container">
           <nav className="crumbs" aria-label="Хлебные крошки">
@@ -278,7 +297,14 @@ function CategoryView({ category }: { category: Category }) {
                       selected={isSelected}
                       editing={isJury || (editing && !saving)}
                       index={index}
-                      onToggle={() => isJury ? setJuryNomineeId(nomineeItem.id) : toggleNominee(nomineeItem.id)}
+                      onToggle={() => {
+                        if (isJury) {
+                          setJuryNomineeId(nomineeItem.id)
+                          burstEmojis(nomineeItem.id, juryNomineeId)
+                        } else {
+                          toggleNominee(nomineeItem.id)
+                        }
+                      }}
                       onOpenLightbox={() => openLightbox(nomineeItem.id)}
                       buttonRef={index === 0 ? firstNomineeRef : undefined}
                     />
@@ -444,7 +470,7 @@ function NomineeCard({
 
   return (
     <article
-      className={`nominee nominee--${visual} ${selected ? 'is-selected' : ''} ${editing ? '' : 'is-locked'
+      className={`nominee nominee--${visual} ${categoryId === 'photographer-goda' ? 'nominee--polaroid' : ''} ${selected ? 'is-selected' : ''} ${editing ? '' : 'is-locked'
         }`}
     >
       <button

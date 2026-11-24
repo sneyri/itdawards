@@ -130,3 +130,39 @@
 
 .admin .invitation-code { display: block; font-size: 1.15rem; letter-spacing: .08em; width: fit-content; }
 .admin .jury-votes__nomination { display: grid; gap: 12px; }
+
+
+.jury-counts,
+.jury-ballots { display: grid; gap: 10px; }
+
+.jury-count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-gold);
+  border-radius: 8px;
+  background: var(--deep);
+}
+
+.jury-count span { color: var(--gold); font-variant-numeric: tabular-nums; }
+
+.jury-ballot {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
+  border-radius: 8px;
+  background: var(--deep);
+}
+
+.jury-ballot__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.jury-ballot__head span { color: var(--muted); font-size: 12px; }
+.jury-ballot__author { margin-top: 7px; color: var(--gold); font-size: 12px; }
+.jury-ballot__text { margin-top: 7px; color: var(--text); line-height: 1.5; }
