@@ -7,8 +7,8 @@ import { useVotes } from '../context/VotesContext'
 import { CategoryImage } from './CategoryImage'
 
 export const CategoryRow = memo(function CategoryRow({ category }: { category: Category }) {
-  const { votes, voteNames } = useVotes()
-  const isVoted = votes[category.id] !== undefined
+  const { votedCategories, voteNames } = useVotes()
+  const isVoted = votedCategories[category.id] === true
   const selectedName = voteNames[category.id]
   const choice = selectedName ? `Ваш выбор: ${selectedName}` : 'Голос учтён'
 

@@ -17,24 +17,24 @@ const filterLabels: Record<Filter, string> = {
 
 export function Nominations() {
   usePageTitle('Номинации')
-  const { categories, votes, voting } = useVotes()
+  const { categories, votedCategories, voting } = useVotes()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
 
   const filterCounts = useMemo(() => {
-    const voted = categories.filter((categoryItem) => votes[categoryItem.id]).length
+    const voted = categories.filter((categoryItem) => votedCategories[categoryItem.id]).length
     return {
       all: categories.length,
       voted,
       unvoted: categories.length - voted,
     }
-  }, [categories, votes])
+  }, [categories, votedCategories])
 
   const filteredCategories = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('ru')
 
     return categories.filter((categoryItem) => {
-      const hasVote = Boolean(votes[categoryItem.id])
+      const hasVote = Boolean(votedCategories[categoryItem.id])
       const matchesFilter =
         filter === 'all' ||
         (filter === 'voted' && hasVote) ||
@@ -57,7 +57,7 @@ export function Nominations() {
 
       return searchable.includes(normalizedQuery)
     })
-  }, [categories, filter, query, votes])
+  }, [categories, filter, query, votedCategories])
 
   const hasActiveFilters = filter !== 'all' || query.trim().length > 0
 

@@ -47,6 +47,7 @@ export function VotesProvider({ children }: { children: ReactNode }) {
         ...current,
         votes: { ...current.votes, [category.id]: String(saved.nominee_id) },
         voteNames: { ...current.voteNames, [category.id]: category.nominees.find((nominee) => nominee.id === nomineeId)?.name ?? '' },
+        votedCategories: { ...current.votedCategories, [category.id]: true },
       }))
     } catch (error) {
       if (error instanceof ApiError && [401, 403, 404, 409].includes(error.status)) {
@@ -80,7 +81,7 @@ export function VotesProvider({ children }: { children: ReactNode }) {
   return (
     <VotesContext.Provider value={{
       ...data,
-      votedCount: Object.keys(data.votes).length,
+      votedCount: Object.keys(data.votedCategories).length,
       saveVote,
       refreshCatalogue,
     }}>

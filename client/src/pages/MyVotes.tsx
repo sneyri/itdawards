@@ -22,6 +22,10 @@ import { AuthAction } from '../components/AuthAction'
 import { fetchMyVotes } from '../lib/awardsApi'
 import type { MyVote } from '../lib/awardsApi'
 
+function sourceLabel(source: MyVote['source']) {
+  return source === 'jury_votes' ? 'Голос жюри' : 'Общий голос'
+}
+
 export function MyVotes() {
   usePageTitle('Мой голос')
   const { categories, auth, voting } = useVotes()
@@ -63,14 +67,27 @@ export function MyVotes() {
     setCopying(true)
 
     try {
-      const namesByCategory = new Map(records.map((record) => [record.nomination_id, record.nominee_name]))
-      const ballot = categories.map((category) => ({
-        title: category.title,
-        nomineeName: namesByCategory.get(category.apiId),
-      }))
+      const recordsByCategory = new Map<number, MyVote[]>()
+      for (const record of records) {
+        const categoryRecords = recordsByCategory.get(record.nomination_id) ?? []
+        categoryRecords.push(record)
+        recordsByCategory.set(record.nomination_id, categoryRecords)
+      }
+      const ballot: { title: string; nomineeName?: string }[] = categories.flatMap((category) => {
+        const categoryRecords = recordsByCategory.get(category.apiId)
+        return categoryRecords?.length
+          ? categoryRecords.map((record) => ({
+            title: `${category.title} · ${sourceLabel(record.source)}`,
+            nomineeName: record.nominee_name,
+          }))
+          : [{ title: category.title }]
+      })
       for (const record of records) {
         if (!categoryById.has(record.nomination_id)) {
-          ballot.push({ title: record.nomination_title, nomineeName: record.nominee_name })
+          ballot.push({
+            title: `${record.nomination_title} · ${sourceLabel(record.source)}`,
+            nomineeName: record.nominee_name,
+          })
         }
       }
       const blob = await createVotesPoster(ballot)
@@ -170,13 +187,15 @@ export function MyVotes() {
                   const nominee = category?.nominees.find((item) => item.id === String(record.nominee_id))
                   const canChange = category?.canVote && voting.allowVoteChanges
                   return (
-                    <article className="vote-card" key={record.nomination_id}>
+                    <article className="vote-card" key={`${record.source}:${record.nomination_id}`}>
                       <div className="vote-card__head">
                         <span className="vote-card__icon" aria-hidden="true">
                           <CategoryIcon id={category?.id ?? ''} size={24} />
                         </span>
                         <div className="vote-card__title">
-                          <span>{category ? groupLabels[category.group] : 'Архив'}</span>
+                          <span>
+                            {category ? groupLabels[category.group] : 'Архив'} · {sourceLabel(record.source)}
+                          </span>
                           <h2>
                             {href ? <Link to={href}>{record.nomination_title}</Link> : record.nomination_title}
                           </h2>
@@ -203,12 +222,21 @@ export function MyVotes() {
                         </li>
                       </ul>
 
+                      {record.justification && (
+                        <p className="vote-card__justification">
+                          <strong>Обоснование жюри</strong>
+                          {record.justification}
+                        </p>
+                      )}
+
                       <div className="vote-card__foot">
                         <span>Голос учтён</span>
                         {href && (
                           <Link to={href} className="vote-card__edit">
-                            {canChange ? 'Изменить' : 'К номинации'}
-                            {canChange ? <Pencil size={13} aria-hidden="true" /> : <ArrowUpRight size={13} aria-hidden="true" />}
+                            {record.source === 'jury_votes' || canChange ? 'Изменить' : 'К номинации'}
+                            {record.source === 'jury_votes' || canChange
+                              ? <Pencil size={13} aria-hidden="true" />
+                              : <ArrowUpRight size={13} aria-hidden="true" />}
                           </Link>
                         )}
                       </div>

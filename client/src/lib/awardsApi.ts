@@ -21,8 +21,7 @@ type CatalogueEntry = {
   image_url: string | null
   can_vote: boolean
   results_available: boolean
-  voted_nominee_id: number | null
-  voted_nominee_name: string | null
+  own_votes: MyVote[]
   nominees: CatalogueNominee[]
 }
 
@@ -35,15 +34,24 @@ export type ResultEntry = {
   weighted_score: number
 }
 
+export type VoteSource = 'votes' | 'jury_votes'
+export type UserRole = 'USER' | 'JURY' | 'MANAGER' | 'SUPERADMIN'
+
 export type MyVote = {
   nomination_id: number
   nominee_id: number
   nomination_title: string
   nominee_name: string
+  source: VoteSource
+  voter_role: UserRole
+  weight: number | null
+  justification: string | null
+  created_at: string
+  updated_at: string | null
 }
 
 export type AuthState = {
-  user: { id: string; displayName: string; role: 'USER' | 'JURY' | 'MANAGER' | 'SUPERADMIN' } | null
+  user: { id: string; displayName: string; role: UserRole } | null
   botUrl: string | null
 }
 
@@ -102,13 +110,19 @@ export async function fetchCatalogue(signal?: AbortSignal) {
   if (!auth || !voting) throw new Error('Сервер не вернул статус входа или голосования.')
   const votes: Record<string, string> = {}
   const voteNames: Record<string, string> = {}
+  const votedCategories: Record<string, boolean> = {}
   const usedSlugs = new Set<string>()
   const categories: Category[] = rows.map((row) => {
     const [slug, group] = getPresentation(row.title) ?? [String(row.id), 'community']
     const id = usedSlugs.has(slug) ? String(row.id) : slug
     usedSlugs.add(id)
-    if (row.voted_nominee_id != null) votes[id] = String(row.voted_nominee_id)
-    if (row.voted_nominee_name) voteNames[id] = row.voted_nominee_name
+    for (const vote of row.own_votes) {
+      votedCategories[id] = true
+      if (vote.source === 'votes') {
+        votes[id] = String(vote.nominee_id)
+        voteNames[id] = vote.nominee_name
+      }
+    }
     return {
       id,
       apiId: row.id,
@@ -138,7 +152,7 @@ export async function fetchCatalogue(signal?: AbortSignal) {
       }),
     }
   })
-  return { categories, votes, voteNames, auth, voting }
+  return { categories, votes, voteNames, votedCategories, auth, voting }
 }
 
 function post<T>(path: string, body: object) {

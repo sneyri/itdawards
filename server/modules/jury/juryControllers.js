@@ -1,4 +1,5 @@
 import pool from '../../database/db.js';
+import { readOwnVotes } from '../voting/voteReader.js';
 import { sendError } from '../../middleware/errorHandler.js';
 import { parseId } from '../../middleware/parseId.js';
 
@@ -23,17 +24,21 @@ export async function getOwnJuryVote(req, res) {
     const nominationId = parseId(req.params.nominationId);
     if (nominationId === null) return sendError(res, 400, 'invalid_id', 'Некорректный идентификатор номинации.');
 
-    const { rows: [vote] } = await pool.query(`
-        SELECT n.id AS nomination_id, v.nominee_id, nominee.name AS nominee_name,
-            v.justification, v.updated_at
-        FROM nominations n
-        LEFT JOIN jury_votes v ON v.nomination_id = n.id AND v.jury_id = $2
-        LEFT JOIN nominees nominee ON nominee.nomination_id = v.nomination_id AND nominee.id = v.nominee_id
-        WHERE n.id = $1
-    `, [nominationId, req.user.id]);
-    if (!vote) return sendError(res, 404, 'nomination_not_found', 'Номинация не найдена.');
-    if (vote.nominee_id === null) return res.json({ data: null });
-    return res.json({ data: vote });
+    const [vote] = (await readOwnVotes(req.user.id, req.user.role, nominationId))
+        .filter((entry) => entry.source === 'jury_votes');
+    if (vote) {
+        return res.json({ data: {
+            nomination_id: vote.nomination_id,
+            nominee_id: vote.nominee_id,
+            nominee_name: vote.nominee_name,
+            justification: vote.justification,
+            updated_at: vote.updated_at,
+        } });
+    }
+
+    const { rows: [nomination] } = await pool.query('SELECT id FROM nominations WHERE id = $1', [nominationId]);
+    if (!nomination) return sendError(res, 404, 'nomination_not_found', 'Номинация не найдена.');
+    return res.json({ data: null });
 }
 
 export async function saveJuryVote(req, res) {

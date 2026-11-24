@@ -24,6 +24,13 @@ const nominations = [
     ] },
 ];
 const juryVotes = new Map();
+const userBallots = new Map([
+    [`${juryId}:1`, {
+        nominee_id: 11,
+        created_at: '2026-11-22T00:00:00.000Z',
+        updated_at: null,
+    }],
+]);
 const legacyReviews = [];
 const originalQuery = pool.query;
 let server;
@@ -54,20 +61,92 @@ before(async () => {
             return { rows: [review] };
         }
 
-        if (query.includes('SELECT n.id AS nomination_id, v.nominee_id')) {
-            const [nominationId, userId] = values;
-            const nomination = nominations.find(entry => entry.id === nominationId);
-            if (!nomination) return { rows: [] };
-            const vote = juryVotes.get(`${userId}:${nominationId}`);
-            if (!vote) return { rows: [{ nomination_id: nominationId, nominee_id: null }] };
-            const nominee = nomination.nominees.find(entry => entry.id === vote.nominee_id);
-            return { rows: [{
-                nomination_id: nominationId,
-                nominee_id: vote.nominee_id,
-                nominee_name: nominee?.name,
-                justification: vote.justification,
-                updated_at: vote.updated_at,
-            }] };
+        if (query.includes('WITH current_settings AS')) {
+            return { rows: nominations.map(nomination => ({
+                id: nomination.id,
+                title: nomination.title,
+                description: '',
+                status: 'open',
+                emoji: null,
+                image_url: null,
+                suggestions_preview: false,
+                can_vote: true,
+                results_available: false,
+                nominee_count: nomination.nominees.length,
+                nominees: nomination.nominees.map(nominee => ({
+                    id: nominee.id,
+                    name: nominee.name,
+                    description: '',
+                    handle: null,
+                    song: null,
+                    image_url: null,
+                    image_alt: null,
+                    audio_url: null,
+                    link_url: null,
+                })),
+                voting: {
+                    allowVoteChanges: true,
+                    startsAt: null,
+                    endsAt: null,
+                    resultsPublished: false,
+                    open: true,
+                },
+            })) };
+        }
+
+        if (query.includes('FROM votes v')) {
+            const [userId, nominationId] = values;
+            return { rows: [...userBallots.entries()]
+                .filter(([key, vote]) => key.startsWith(`${userId}:`)
+                    && (nominationId === null || Number(key.split(':')[1]) === nominationId))
+                .map(([key, vote]) => {
+                    const [, id] = key.split(':');
+                    const nomination = nominations.find(entry => entry.id === Number(id));
+                    const nominee = nomination?.nominees.find(entry => entry.id === vote.nominee_id);
+                    return {
+                        nomination_sort_order: nomination?.sort_order ?? 0,
+                        nomination_id: Number(id),
+                        nominee_id: vote.nominee_id,
+                        nomination_title: nomination?.title,
+                        nominee_name: nominee?.name,
+                        source: 'votes',
+                        voter_role: 'JURY',
+                        weight: 5,
+                        justification: null,
+                        created_at: vote.created_at,
+                        updated_at: vote.updated_at,
+                    };
+                }) };
+        }
+
+        if (query.includes('FROM jury_votes v') && query.includes('v.jury_id = $1')) {
+            const [userId, nominationId] = values;
+            return { rows: [...juryVotes.entries()]
+                .filter(([key, vote]) => key.startsWith(`${userId}:`)
+                    && (nominationId === null || vote.nomination_id === nominationId))
+                .map(([key, vote]) => {
+                    const [, id] = key.split(':');
+                    const nomination = nominations.find(entry => entry.id === Number(id));
+                    const nominee = nomination?.nominees.find(entry => entry.id === vote.nominee_id);
+                    return {
+                        nomination_sort_order: nomination?.sort_order ?? 0,
+                        nomination_id: Number(id),
+                        nominee_id: vote.nominee_id,
+                        nomination_title: nomination?.title,
+                        nominee_name: nominee?.name,
+                        source: 'jury_votes',
+                        voter_role: 'JURY',
+                        weight: null,
+                        justification: vote.justification,
+                        created_at: vote.created_at ?? '2026-11-23T00:00:00.000Z',
+                        updated_at: vote.updated_at,
+                    };
+                }) };
+        }
+
+        if (query.includes('SELECT id FROM nominations WHERE id = $1')) {
+            const nomination = nominations.find(entry => entry.id === values[0]);
+            return { rows: nomination ? [{ id: nomination.id }] : [] };
         }
 
         if (query.includes('INSERT INTO jury_votes')) {
@@ -80,10 +159,12 @@ before(async () => {
                 nomination_id: nominationId,
                 nominee_id: nomineeId,
                 justification,
+                created_at: '2026-11-23T00:00:00.000Z',
                 updated_at: '2026-11-23T01:00:00.000Z',
             };
             juryVotes.set(key, vote);
-            return { rows: [vote] };
+            const { created_at, ...responseVote } = vote;
+            return { rows: [responseVote] };
         }
 
         if (query.includes('SELECT id, title FROM nominations')) {
@@ -189,6 +270,9 @@ test('jury voting is role-protected, nomination-scoped, editable, and anonymous 
         nomination_id: 1, nominee_id: 11, justification: 'x'.repeat(257),
     }, juryToken)).status, 400);
 
+    assert.deepEqual((await (await get('/jury/votes/1', juryToken)).json()).data, null);
+    assert.equal((await get('/jury/votes/999', juryToken)).status, 404);
+
     const first = await post('/jury/votes', {
         nomination_id: 1, nominee_id: 11, justification: 'Сильная работа.',
     }, juryToken);
@@ -196,6 +280,7 @@ test('jury voting is role-protected, nomination-scoped, editable, and anonymous 
     assert.deepEqual(Object.keys((await first.json()).data).sort(),
         ['justification', 'nomination_id', 'nominee_id', 'updated_at']);
     assert.equal(juryVotes.size, 1);
+    assert.deepEqual((await (await get('/jury/votes/1', secondJuryToken)).json()).data, null);
 
     const edited = await post('/jury/votes', {
         nomination_id: 1, nominee_id: 12, justification: 'Меняю выбор и обоснование.',
@@ -218,6 +303,29 @@ test('jury voting is role-protected, nomination-scoped, editable, and anonymous 
         justification: 'Меняю выбор и обоснование.',
         updated_at: '2026-11-23T01:00:00.000Z',
     });
+
+    const ownVotes = await get('/votes/me', juryToken);
+    assert.deepEqual((await ownVotes.json()).data.map(({ source, nominee_id }) => ({ source, nominee_id })), [
+        { source: 'votes', nominee_id: 11 },
+        { source: 'jury_votes', nominee_id: 12 },
+    ]);
+
+    const otherMemberVotes = await get('/votes/me', secondJuryToken);
+    const otherMemberVoteData = (await otherMemberVotes.json()).data;
+    assert.deepEqual(otherMemberVoteData.map(({ source, nominee_id }) => ({ source, nominee_id })), [
+        { source: 'jury_votes', nominee_id: 12 },
+    ]);
+    assert.equal(JSON.stringify(otherMemberVoteData).includes('Меняю выбор'), false);
+
+    const catalogueResponse = await get('/nominations?include=nominees', juryToken);
+    assert.equal(catalogueResponse.status, 200);
+    const catalogue = (await catalogueResponse.json()).data;
+    assert.deepEqual(catalogue.find(entry => entry.id === 1).own_votes.map(
+        ({ source, nominee_id }) => ({ source, nominee_id }),
+    ), [
+        { source: 'votes', nominee_id: 11 },
+        { source: 'jury_votes', nominee_id: 12 },
+    ]);
 
     const legacy = await post('/jury/reviews', {
         nomination_id: 1, content: 'Старый отзыв без выбранного номинанта.',

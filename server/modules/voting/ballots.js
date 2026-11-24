@@ -2,6 +2,7 @@ import pool, { transaction } from '../../database/db.js';
 import { activeVoting } from './tallies.js';
 import { sendError } from '../../middleware/errorHandler.js';
 import { parseId } from '../../middleware/parseId.js';
+import { readOwnVotes } from './voteReader.js';
 
 const errors = {
     login_required: [401, 'Войдите в аккаунт.'],
@@ -13,14 +14,8 @@ const errors = {
 };
 
 export async function getMyVotes(req, res) {
-    const { rows } = await pool.query(`
-        SELECT v.nomination_id, v.nominee_id, n.title AS nomination_title, m.name AS nominee_name,
-            v.created_at, v.updated_at
-        FROM votes v JOIN nominations n ON n.id = v.nomination_id JOIN nominees m ON m.id = v.nominee_id
-        WHERE v.user_id = $1 AND v.voter_role IS NOT NULL
-        ORDER BY n.sort_order, n.id
-    `, [req.user.id]);
-    return res.json({ data: rows });
+    const votes = await readOwnVotes(req.user.id, req.user.role);
+    return res.json({ data: votes });
 }
 
 export async function postVote(req, res) {

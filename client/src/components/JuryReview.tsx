@@ -18,7 +18,7 @@ type JuryReviewProps = {
 }
 
 export function JuryReview({ categoryId, nominees }: JuryReviewProps) {
-  const { auth } = useVotes()
+  const { auth, refreshCatalogue } = useVotes()
   const [vote, setVote] = useState<JuryVote | null>(null)
   const [nomineeId, setNomineeId] = useState('')
   const [justification, setJustification] = useState('')
@@ -81,6 +81,7 @@ export function JuryReview({ categoryId, nominees }: JuryReviewProps) {
       setNomineeId(String(savedVote.nominee_id))
       setJustification(savedVote.justification)
       setEditing(false)
+      await refreshCatalogue()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Не удалось сохранить голос жюри.')
     } finally {

@@ -1,6 +1,7 @@
 import { publicOrigin } from '../../config.js';
 import pool from '../../database/db.js';
 import { activeVoting } from '../voting/tallies.js';
+import { readOwnVotes } from '../voting/voteReader.js';
 import { sendError } from '../../middleware/errorHandler.js';
 import { parseId } from '../../middleware/parseId.js';
 import { authState } from '../auth/sessions.js';
@@ -13,7 +14,7 @@ function invalidId(res) {
     return sendError(res, 400, 'invalid_id', 'Укажите корректный идентификатор.');
 }
 
-async function readCatalog(userId, includeNominees, nominationId = null) {
+async function readCatalog(userId, role, includeNominees, nominationId = null) {
     const { rows } = await pool.query(`
         WITH current_settings AS (
             SELECT s.allow_vote_changes, s.opens_at, s.closes_at, s.results_published, (${activeVoting}) AS open
@@ -22,37 +23,47 @@ async function readCatalog(userId, includeNominees, nominationId = null) {
         SELECT n.id, n.title, n.description, n.status, n.emoji, n.image_url, n.suggestions_preview,
             (n.status = 'open' AND s.open) AS can_vote, s.results_published AS results_available,
             COALESCE(entry.nominee_count, 0) AS nominee_count,
-            v.nominee_id AS voted_nominee_id, chosen.name AS voted_nominee_name,
-            CASE WHEN $2::boolean THEN COALESCE(entry.nominees, '[]'::json) END AS nominees,
+            CASE WHEN $1::boolean THEN COALESCE(entry.nominees, '[]'::json) END AS nominees,
             json_build_object(
                 'allowVoteChanges', s.allow_vote_changes, 'startsAt', s.opens_at, 'endsAt', s.closes_at,
                 'resultsPublished', s.results_published, 'open', s.open
             ) AS voting
         FROM current_settings s
-        LEFT JOIN nominations n ON NOT n.archived AND n.status <> 'draft' AND ($3::int IS NULL OR n.id = $3)
-        LEFT JOIN votes v ON v.nomination_id = n.id AND v.user_id = $1 AND v.voter_role IS NOT NULL
-        LEFT JOIN nominees chosen ON chosen.id = v.nominee_id
+        LEFT JOIN nominations n ON NOT n.archived AND n.status <> 'draft' AND ($2::int IS NULL OR n.id = $2)
         LEFT JOIN LATERAL (
-            SELECT count(*)::int AS nominee_count, CASE WHEN $2::boolean THEN json_agg(json_build_object(
+            SELECT count(*)::int AS nominee_count, CASE WHEN $1::boolean THEN json_agg(json_build_object(
                 'id', m.id, 'name', m.name, 'description', m.description, 'handle', m.handle, 'song', m.song,
                 'image_url', m.image_url, 'image_alt', m.image_alt, 'audio_url', m.audio_url, 'link_url', m.link_url
             ) ORDER BY m.sort_order, m.id) END AS nominees
             FROM nominees m WHERE m.nomination_id = n.id AND NOT m.archived
         ) entry ON true
         ORDER BY n.sort_order, n.id
-    `, [userId, includeNominees, nominationId]);
+    `, [includeNominees, nominationId]);
+    const ownVotes = await readOwnVotes(userId, role, nominationId);
+    const votesByNomination = new Map();
+    for (const vote of ownVotes) {
+        const votes = votesByNomination.get(vote.nomination_id) ?? [];
+        votes.push(vote);
+        votesByNomination.set(vote.nomination_id, votes);
+    }
     return {
-        data: rows.filter((row) => row.id !== null).map(({ voting, ...row }) => row),
+        data: rows.filter((row) => row.id !== null).map(({ voting, ...row }) => {
+            const own_votes = votesByNomination.get(row.id) ?? [];
+            return {
+                ...row,
+                own_votes,
+            };
+        }),
         voting: rows[0].voting,
     };
 }
 
 export async function getNominations(req, res) {
     const includeNominees = req.query.include === 'nominees';
-    const { data, voting } = await readCatalog(req.user?.id ?? null, includeNominees);
+    const { data, voting } = await readCatalog(req.user?.id ?? null, req.user?.role, includeNominees);
     if (includeNominees) return res.json({ data, auth: authState(req), voting });
     return res.json({
-        data: data.map(({ nominees, voted_nominee_id, voted_nominee_name, ...nomination }) => nomination),
+        data: data.map(({ nominees, own_votes, ...nomination }) => nomination),
         voting,
     });
 }
@@ -60,7 +71,7 @@ export async function getNominations(req, res) {
 export async function getNomination(req, res) {
     const id = parseId(req.params.id);
     if (id === null) return invalidId(res);
-    const { data: [nomination], voting } = await readCatalog(req.user?.id ?? null, true, id);
+    const { data: [nomination], voting } = await readCatalog(req.user?.id ?? null, req.user?.role, true, id);
     if (!nomination) return notFound(res);
     return res.json({ data: nomination, auth: authState(req), voting });
 }
@@ -68,7 +79,7 @@ export async function getNomination(req, res) {
 export async function getNominees(req, res) {
     const id = parseId(req.params.id);
     if (id === null) return invalidId(res);
-    const { data: [nomination] } = await readCatalog(null, true, id);
+    const { data: [nomination] } = await readCatalog(null, null, true, id);
     if (!nomination) return notFound(res);
     return res.json({ data: nomination.nominees });
 }
