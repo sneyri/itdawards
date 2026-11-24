@@ -6006,3 +6006,50 @@ main:focus {
 
 .minesweeper__cell.is-flagged { background: #3a2f1d; }
 .minesweeper__cell.is-mine { background: #4a2420; }
+
+
+.emoji-burst {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.emoji-burst__item {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: clamp(24px, 4vw, 42px);
+  animation: emoji-scatter 1.6s ease-out forwards;
+}
+
+@keyframes emoji-scatter {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(0deg); }
+  12% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.25) rotate(var(--rotate));
+  }
+}
+
+.nominee--polaroid,
+.nominee--polaroid .nominee__media,
+.nominee--polaroid .nominee__zoom,
+.nominee--polaroid .nominee__toggle,
+.nominee--polaroid .cover {
+  border-radius: 0;
+}
+
+.nominee--polaroid .nominee__handle,
+.nominee--polaroid:hover .nominee__handle,
+.nominee--polaroid .nominee__handle:hover {
+  color: #fff;
+  background: #1a150a;
+  padding: 2px 6px;
+  border-radius: 0;
+}
+
+.nominee--polaroid.is-selected,
+.nominee--polaroid.is-selected .nominee__media {
+  border-color: #fff;
+}

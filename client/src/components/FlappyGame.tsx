@@ -4,6 +4,26 @@ import { RotateCcw, X } from 'lucide-react'
 
 type Pipe = { x: number; gapY: number; passed: boolean }
 
+const BIRD = [
+  '000111100000',
+  '001111110000',
+  '011211111000',
+  '111231111100',
+  '111111111440',
+  '111111111440',
+  '011151111000',
+  '001111110000',
+  '000111100000',
+]
+
+const BIRD_COLORS: Record<string, string> = {
+  '1': '#e6bf78',
+  '2': '#fff7e6',
+  '3': '#1a150a',
+  '4': '#d98c3f',
+  '5': '#c8a15f',
+}
+
 type GameState = {
   y: number
   vy: number
@@ -87,13 +107,16 @@ export function FlappyGame({ onClose }: { onClose: () => void }) {
         context.fillRect(pipe.x, 0, 42, pipe.gapY - 58)
         context.fillRect(pipe.x, pipe.gapY + 58, 42, height)
       }
-      context.beginPath()
-      context.arc(80, state.y, 14, 0, Math.PI * 2)
-      context.fillStyle = state.over ? '#9b8a66' : '#e6bf78'
-      context.fill()
-      context.fillStyle = '#1a150a'
-      context.font = 'bold 8px sans-serif'
-      context.fillText('ITD', 68, state.y + 3)
+      const pixel = 3
+      const birdLeft = 80 - (BIRD[0].length * pixel) / 2
+      const birdTop = Math.round(state.y - (BIRD.length * pixel) / 2)
+      BIRD.forEach((row, rowIndex) => {
+        row.split('').forEach((cell, columnIndex) => {
+          if (cell === '0') return
+          context.fillStyle = state.over && cell !== '3' ? '#9b8a66' : BIRD_COLORS[cell]
+          context.fillRect(birdLeft + columnIndex * pixel, birdTop + rowIndex * pixel, pixel, pixel)
+        })
+      })
       animation = window.requestAnimationFrame(draw)
     }
     animation = window.requestAnimationFrame(draw)

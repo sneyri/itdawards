@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import type { RefObject } from 'react'
+import type { MouseEvent as ReactMouseEvent, RefObject } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
@@ -61,7 +61,7 @@ function CategoryView({ category }: { category: Category }) {
   const { categories, votes, voteNames, saveVote, auth, voting } = useVotes()
   const isJury = auth.user?.role === 'JURY'
   const [juryNomineeId, setJuryNomineeId] = useState('')
-  const [emojiBurst, setEmojiBurst] = useState<{ id: number; emojis: string[] } | null>(null)
+  const [emojiBurst, setEmojiBurst] = useState<{ id: number; emojis: string[]; origin: { x: number; y: number } } | null>(null)
   const { showToast } = useToast()
   const location = useLocation()
   const navigate = useNavigate()
@@ -104,20 +104,21 @@ function CategoryView({ category }: { category: Category }) {
     if (index >= 0) setLightboxIndex(index)
   }
 
-  function burstEmojis(nomineeId: string, current: string | undefined) {
+  function burstEmojis(nomineeId: string, current: string | undefined, event?: ReactMouseEvent<HTMLButtonElement>) {
     if (category.id !== 'meme-goda' || nomineeId === current) return
     const pool = ['😂', '🤣', '😹', '💀', '🔥', '🐸', '👀', '🎭']
     setEmojiBurst({
       id: Date.now(),
       emojis: Array.from({ length: 12 }, () => pool[Math.floor(Math.random() * pool.length)]),
+      origin: { x: event?.clientX ?? window.innerWidth / 2, y: event?.clientY ?? window.innerHeight / 2 },
     })
   }
 
-  const toggleNominee = (nomineeId: string) => {
+  const toggleNominee = (nomineeId: string, event?: ReactMouseEvent<HTMLButtonElement>) => {
     if (!editing || saving) return
     setError('')
     setDraft(nomineeId)
-    burstEmojis(nomineeId, draft)
+    burstEmojis(nomineeId, draft, event)
   }
 
   const handleSave = async () => {
@@ -181,6 +182,7 @@ function CategoryView({ category }: { category: Category }) {
         <EmojiBurst
           key={emojiBurst.id}
           emojis={emojiBurst.emojis}
+          origin={emojiBurst.origin}
           onDone={() => setEmojiBurst(null)}
         />
       )}
@@ -297,12 +299,12 @@ function CategoryView({ category }: { category: Category }) {
                       selected={isSelected}
                       editing={isJury || (editing && !saving)}
                       index={index}
-                      onToggle={() => {
+                      onToggle={(event) => {
                         if (isJury) {
                           setJuryNomineeId(nomineeItem.id)
-                          burstEmojis(nomineeItem.id, juryNomineeId)
+                          burstEmojis(nomineeItem.id, juryNomineeId, event)
                         } else {
-                          toggleNominee(nomineeItem.id)
+                          toggleNominee(nomineeItem.id, event)
                         }
                       }}
                       onOpenLightbox={() => openLightbox(nomineeItem.id)}
@@ -449,7 +451,7 @@ type NomineeCardProps = {
   selected: boolean
   editing: boolean
   index: number
-  onToggle: () => void
+  onToggle: (event?: ReactMouseEvent<HTMLButtonElement>) => void
   onOpenLightbox: () => void
   buttonRef?: RefObject<HTMLButtonElement | null>
 }
@@ -480,7 +482,7 @@ function NomineeCard({
         aria-pressed={selected}
         aria-label={selected ? `${nominee.name} — выбран` : `Выбрать ${nominee.name}`}
         disabled={!editing}
-        onClick={onToggle}
+        onClick={(event) => onToggle(event)}
       />
 
       <div className="nominee__media">
