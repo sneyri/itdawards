@@ -26,6 +26,8 @@
         <strong id="section-name">Обзор</strong>
         <div id="header-status" aria-label="Состояние сервисов"><span class="status">Подключение…</span></div>
         <div class="header-actions">
+          <button id="command-open" class="button command-open" type="button" aria-keyshortcuts="Control+K Meta+K" aria-haspopup="dialog"><span aria-hidden="true">⌕</span> Разделы <kbd>Ctrl K</kbd></button>
+          <button id="effects-toggle" class="button subtle compact" type="button" aria-pressed="true">Эффекты: вкл.</button>
           <button id="refresh-panel" class="button subtle compact" type="button">Обновить</button>
           <div class="operator"><span id="operator-mark" class="operator-mark" aria-hidden="true">··</span><span><strong id="operator-name">Аккаунт</strong><small id="operator-role">Проверка сессии</small></span></div>
           <a class="button subtle compact" href="/nominations">На сайт</a>
@@ -35,6 +37,7 @@
       <div id="view" class="view"><div class="skeleton" role="status" aria-label="Загрузка панели"><span></span><span></span><span></span></div></div>
     </main>
   </div>
+  <dialog id="command-dialog" class="command-dialog" aria-labelledby="command-title"></dialog>
   <dialog id="dialog" class="dialog" aria-labelledby="dialog-title"></dialog>
   <div id="notifications" class="notifications" role="status" aria-live="polite"></div>
 </body>

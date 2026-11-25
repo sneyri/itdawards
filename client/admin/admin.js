@@ -80,42 +80,58 @@ function panel(title, body, action, description) {
 async function loadOverview(_operator, signal) {
     const stats = await readPanelData('/admin/stats');
     const services = el('div');
-    const phase = el('div');
-    const votes = el('strong', { class: 'stat-value' });
-    const voterPercent = stats.users ? Math.round(stats.voters / stats.users * 100) : 0;
+    const phase = el('strong', { class: 'command-phase' });
+    const phaseHint = el('span', { class: 'muted' });
+    const warnings = el('div', { 'aria-live': 'polite' });
+    const votes = el('strong', { class: 'command-number' }, numeric(stats.votes));
+    const turnout = stats.users ? Math.round(stats.voters / stats.users * 100) : 0;
     function update(report) {
         votes.textContent = numeric(report?.stats?.votes ?? stats.votes);
-        services.replaceChildren(servicesShort(report));
         const state = report?.phase ?? (stats.voting_open ? 'voting' : 'closed');
-        phase.replaceChildren(status(formatPhase(state), state === 'voting' ? 'ok' : 'warn'));
+        phase.textContent = formatPhase(state);
+        phaseHint.textContent = report ? 'Состояние обновляется автоматически' : 'По последним доступным данным';
+        services.replaceChildren(servicesShort(report));
+        if (!report) {
+            warnings.replaceChildren(notice('Нет связи с мониторингом. Состояние сервисов неизвестно.', true));
+            return;
+        }
+        const issues = Object.entries(serviceNames).filter(([key]) => ['down', 'degraded'].includes(report[key]?.status));
+        const unknown = Object.keys(serviceNames).some(key => !report[key] || !['ok', 'down', 'degraded'].includes(report[key].status));
+        warnings.replaceChildren(issues.length
+            ? notice('Требуют внимания: ' + issues.map(([, name]) => name).join(', '), true)
+            : unknown ? notice('Состояние некоторых сервисов пока неизвестно.')
+                : el('p', { class: 'command-clear' }, 'Сбоев ключевых сервисов не обнаружено'));
     }
     update(currentTelemetry);
     window.addEventListener('admin:telemetry', event => update(event.detail.report), { signal });
-    return el('section', { class: 'page-stack' },
-        heading('Обзор', 'Каталог, участники и голосование', pageHref('Управлять голосованием', 'voting', 'primary')),
-        el('div', { class: 'stat-grid' },
-            statCard({ label: 'Пользователи', value: stats.users, icon: '◎', note: 'Вошли в аккаунт: ' + stats.registered }),
-            statCard({ label: 'Голоса', value: votes, icon: '◆', note: 'Баллов с весом: ' + stats.weighted_score }),
-            statCard({ label: 'Проголосовали', value: stats.voters, icon: '✓', note: voterPercent + '% от всех пользователей' }),
-            statCard({ label: 'Номинации', value: stats.nominations, icon: '◫', note: 'Номинантов: ' + stats.nominees }),
-            statCard({ label: 'Жюри', value: stats.jurors, icon: '✦', note: 'Администраторов: ' + stats.administrators }),
-            statCard({ label: 'Активные коды', value: stats.invitations_active, icon: '⌁', note: 'Доступных приглашений' })),
-        el('div', { class: 'dashboard-grid' },
+    const orbit = el('div', { class: 'command-orbit', 'aria-hidden': 'true' },
+        el('span', { class: 'command-orbit__ring' }), el('span', { class: 'command-orbit__core' }, 'ITD'));
+    const hero = el('section', { class: 'command-hero' }, orbit,
+        el('div', { class: 'command-hero__content' },
+            el('p', { class: 'command-eyebrow' }, 'ITD AWARDS / ЦЕНТР УПРАВЛЕНИЯ'),
+            el('h1', {}, 'Премия в движении'),
+            el('div', { class: 'command-phase-line' }, phase, phaseHint),
+            el('div', { class: 'command-actions' }, pageHref('Управлять голосованием', 'voting', 'primary'),
+                pageHref('Открыть каталог', 'catalog', 'subtle'))),
+        el('div', { class: 'command-hero__metric' }, el('span', {}, 'ВСЕГО ГОЛОСОВ'), votes,
+            el('span', {}, numeric(stats.voters) + ' участников проголосовали')));
+    return el('section', { class: 'page-stack command-center' }, hero,
+        el('div', { class: 'command-metrics' },
+            el('div', {}, el('span', {}, 'Участие'), el('strong', {}, turnout + '%'), el('small', {}, 'от всех пользователей')),
+            el('div', {}, el('span', {}, 'Пользователи'), el('strong', {}, numeric(stats.users)), el('small', {}, numeric(stats.registered) + ' вошли в аккаунт')),
+            el('div', {}, el('span', {}, 'Каталог'), el('strong', {}, numeric(stats.nominations)), el('small', {}, numeric(stats.nominees) + ' номинантов')),
+            el('div', {}, el('span', {}, 'Приглашения'), el('strong', {}, numeric(stats.invitations_active)), el('small', {}, 'доступных кодов'))),
+        el('div', { class: 'command-grid' },
             el('div', { class: 'page-stack' },
-                panel('Голосование', phase, pageHref('Настройки', 'voting', 'subtle compact')),
-                panel('Сервисы', services, pageHref('Подробнее', 'system', 'subtle compact'))),
-            panel('Последние действия', eventList(stats.recent_actions))));
-}
-
-function statCard({ label, value, note, icon }) {
-    const display = value instanceof Node ? value : el('strong', { class: 'stat-value' });
-    if (!(value instanceof Node)) display.textContent = numeric(value);
-    return el('article', { class: 'panel stat-card' },
-        el('div', { class: 'stat-card__head' },
-            el('h2', {}, label),
-            el('span', { class: 'stat-card__icon', 'aria-hidden': 'true' }, icon)),
-        display,
-        note ? el('p', { class: 'stat-card__note' }, note) : null);
+                panel('Динамика участия', activityChart(stats.trends ?? [], signal), null, 'Последние 30 дней · UTC'),
+                panel('Последние события', eventList(stats.recent_actions))),
+            el('div', { class: 'page-stack' },
+                panel('Внимание', warnings, pageHref('Диагностика', 'system', 'subtle compact')),
+                panel('Сервисы', services, pageHref('Подробнее', 'system', 'subtle compact')),
+                panel('Быстрые действия', el('div', { class: 'command-shortcuts' },
+                    pageHref('Пригласить участника', 'invitations', 'subtle'),
+                    pageHref('Управление пользователями', 'users', 'subtle'),
+                    pageHref('Голоса жюри', 'jury-votes', 'subtle'))))));
 }
 
 function settingsForm(settings, owner, signal) {
@@ -257,25 +273,41 @@ async function loadJuryVotes(_operator, signal) {
                     date: row.created_at ? time(row.created_at) : '—',
                 })),
             ];
-            const countCards = counts.length
-                ? counts.map(row => el('div', { class: 'jury-count' },
-                    el('strong', {}, row.nominee_name),
-                    el('span', {}, numeric(row.vote_count) + ' голосов')))
-                : [el('p', { class: 'muted' }, 'В этой номинации пока нет номинантов.')];
-            const ballotCards = rows.length
-                ? rows.map(row => el('article', { class: 'jury-ballot' },
-                    el('div', { class: 'jury-ballot__head' },
-                        el('strong', {}, row.title),
-                        el('span', {}, row.date)),
-                    el('p', { class: 'jury-ballot__author' }, 'Автор: ' + row.author),
-                    el('p', { class: 'jury-ballot__text' }, row.text)))
-                : [el('p', { class: 'muted' }, 'Голосов и старых отзывов пока нет.')];
+            const sortedCounts = [...counts].sort((a, b) => Number(b.vote_count) - Number(a.vote_count)
+                || String(a.nominee_name).localeCompare(String(b.nominee_name), 'ru'));
+            const total = sortedCounts.reduce((sum, row) => sum + Number(row.vote_count || 0), 0);
+            const countRows = sortedCounts.length
+                ? sortedCounts.map(row => {
+                    const count = Number(row.vote_count || 0);
+                    const share = total ? Math.round(count / total * 100) : 0;
+                    return el('tr', {}, el('td', {}, row.nominee_name),
+                        el('td', { class: 'jury-distribution' },
+                            el('meter', { min: '0', max: '100', value: String(share),
+                                'aria-label': `Доля голосов: ${share}%` }),
+                            el('span', {}, share + '%')),
+                        el('td', { class: 'jury-number' }, numeric(count)));
+                }) : [];
+            const distribution = countRows.length
+                ? el('div', { class: 'table-frame' }, el('table', {},
+                    el('thead', {}, el('tr', {}, el('th', { scope: 'col' }, 'Номинант'),
+                        el('th', { scope: 'col' }, 'Доля'), el('th', { scope: 'col' }, 'Голосов'))),
+                    el('tbody', {}, ...countRows)))
+                : el('p', { class: 'muted' }, 'В этой номинации пока нет номинантов.');
+            const ballotRows = rows.length
+                ? rows.map(row => el('li', { class: 'jury-review' },
+                    el('div', { class: 'jury-review__head' }, el('strong', {}, row.title),
+                        el('span', { class: 'muted' }, row.date)),
+                    el('p', { class: 'muted' }, 'Автор: ' + row.author),
+                    el('p', { class: 'jury-review__text' }, row.text)))
+                : [el('li', { class: 'muted' }, 'Голосов и старых отзывов пока нет.')];
             return el('section', { class: 'panel jury-votes__nomination' },
-                el('h2', {}, nomination.title),
-                el('h3', {}, 'Количество голосов за номинантов'),
-                el('div', { class: 'jury-counts' }, ...countCards),
-                el('h3', {}, 'Голоса и обоснования'),
-                el('div', { class: 'jury-ballots' }, ...ballotCards));
+                el('div', { class: 'jury-section-head' }, el('h2', {}, nomination.title),
+                    el('span', { class: 'muted' }, numeric(total) + ' голосов')),
+                distribution,
+                el('details', { class: 'jury-reviews' },
+                    el('summary', {}, 'Обоснования · ' + numeric(rows.length)),
+                    el('ul', { class: 'jury-reviews__list' }, ...ballotRows)));
+
         }));
     }
 
@@ -471,6 +503,66 @@ async function init() {
         fail(error);
     }
 }
+
+const commandDialog = document.getElementById('command-dialog');
+const commandOpen = document.getElementById('command-open');
+function openCommands() {
+    if (!viewer || commandDialog.open || document.getElementById('dialog').open) return;
+    const input = el('input', { type: 'search', class: 'command-search', placeholder: 'Название раздела', 'aria-label': 'Поиск раздела', autocomplete: 'off' });
+    const list = el('div', { class: 'command-list', 'aria-live': 'polite' });
+    const render = () => {
+        const query = input.value.trim().toLocaleLowerCase('ru');
+        const matches = visible.filter(([, title]) => title.toLocaleLowerCase('ru').includes(query));
+        list.replaceChildren(...(matches.length ? matches.map(([id, title, , icon]) =>
+            button([el('span', { class: 'command-item-icon', 'aria-hidden': 'true' }, icon),
+                el('span', {}, title), el('span', { class: 'command-item-key', 'aria-hidden': 'true' }, '↵')], () => {
+                commandDialog.close(); location.hash = id;
+            }, 'command-item')) : [el('p', { class: 'empty' }, 'Раздел не найден')]));
+    };
+    input.addEventListener('input', render);
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Escape') { event.preventDefault(); commandDialog.close(); return; }
+        if (event.key === 'ArrowDown') { event.preventDefault(); list.querySelector('button')?.focus(); }
+        if (event.key === 'Enter') { event.preventDefault(); list.querySelector('button')?.click(); }
+    });
+    list.addEventListener('keydown', event => {
+        const items = [...list.querySelectorAll('button')];
+        const index = items.indexOf(document.activeElement);
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (event.key === 'ArrowUp' && index === 0) input.focus();
+            else items[Math.max(0, Math.min(items.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus();
+        }
+    });
+    commandDialog.replaceChildren(el('div', { class: 'command-dialog__head' },
+        el('div', {}, el('p', { class: 'command-eyebrow' }, 'ITD AWARDS / НАВИГАЦИЯ'), el('h2', { id: 'command-title' }, 'Перейти к разделу')),
+        button('×', () => commandDialog.close(), 'subtle icon-only', { 'aria-label': 'Закрыть' })), input, list,
+        el('p', { class: 'command-help' }, '↑ ↓ выбор   ·   Enter открыть   ·   Esc закрыть'));
+    render(); commandDialog.showModal(); input.focus();
+}
+commandOpen.addEventListener('click', openCommands);
+document.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        if (commandDialog.open) commandDialog.close(); else openCommands();
+    }
+});
+
+const effectsToggle = document.getElementById('effects-toggle');
+let effectsEnabled = true;
+try { effectsEnabled = localStorage.getItem('admin-effects') !== 'off'; } catch { /* Storage is optional. */ }
+function updateEffects() {
+    document.body.classList.toggle('effects-off', !effectsEnabled);
+    effectsToggle.setAttribute('aria-pressed', String(effectsEnabled));
+    effectsToggle.textContent = effectsEnabled ? 'Эффекты: вкл.' : 'Эффекты: выкл.';
+}
+effectsToggle.addEventListener('click', () => {
+    effectsEnabled = !effectsEnabled;
+    try { localStorage.setItem('admin-effects', effectsEnabled ? 'on' : 'off'); } catch { /* Storage is optional. */ }
+    updateEffects();
+});
+updateEffects();
+document.addEventListener('visibilitychange', () => document.body.classList.toggle('motion-paused', document.hidden));
 
 window.addEventListener('hashchange', () => { if (viewer) showPanel(); });
 document.getElementById('refresh-panel').addEventListener('click', () => {

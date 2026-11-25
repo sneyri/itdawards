@@ -181,7 +181,7 @@ function showIssuedInvitation(invitation, title = 'Приглашение соз
     showDialog(title, el('div', { class: 'form-stack' },
         notice('Передайте код участнику лично. Его можно использовать один раз на странице входа.'),
         el('code', { class: 'secret invitation-code' }, invitation.code),
-        definition([['Роль', roles[invitation.role]], ['Действует до', invitation.role === 'JURY' ? 'Бессрочно' : date(invitation.expires_at)]]),
+        definition([['Роль', roles[invitation.role]], ['Действует до', invitation.expires_at ? date(invitation.expires_at) : 'Бессрочно']]),
         el('div', { class: 'toolbar' }, clipboardButton('Скопировать код', invitation.code),
             clipboardButton('Скопировать ссылку на вход', signIn),
             el('a', { class: 'text-link', href: signIn, target: '_blank', rel: 'noopener noreferrer' }, 'Открыть страницу входа'))));
@@ -189,7 +189,7 @@ function showIssuedInvitation(invitation, title = 'Приглашение соз
 
 function showIssuedBatch(invitations) {
     showDialog('Коды созданы', el('div', { class: 'form-stack' },
-        notice('Коды действуют пять минут. Передайте каждому участнику его код и ссылку на вход.'),
+        notice('Передайте каждому участнику его одноразовый код и ссылку на вход.'),
         el('ol', { class: 'admin-invite-codes' }, invitations.map(invitation => el('li', {},
             el('code', { class: 'secret invitation-code' }, invitation.code),
             el('div', { class: 'toolbar' }, clipboardButton('Скопировать код', invitation.code))))),
@@ -216,7 +216,7 @@ function createInvitation(onSave, signal) {
     const form = el('form', { class: 'form-stack' },
         textField('Имя участника', 'displayName', '', { required: true, maxlength: 120 }),
         selectField('Роль', 'role', participantRoles, 'JURY'),
-        el('p', { class: 'muted' }, 'Код действует пять минут и используется один раз.'),
+        el('p', { class: 'muted' }, 'Код используется один раз; срок действия будет указан после создания.'),
         formError(), el('div', { class: 'dialog-actions' }, submit('Создать приглашение')));
     bindForm(form, async fields => {
         const invitation = await request('/admin/invitations', { method: 'POST', signal, data: {
@@ -233,7 +233,7 @@ function createBatch(onSave, signal) {
     const form = el('form', { class: 'form-stack' },
         selectField('Роль', 'role', participantRoles, 'JURY'),
         textField('Количество кодов', 'count', '5', { type: 'number', required: true, min: 1, max: 25 }),
-        el('p', { class: 'muted' }, 'Система создаст аккаунт и одноразовый код для каждого участника. Коды действуют пять минут.'),
+        el('p', { class: 'muted' }, 'Система создаст аккаунт и одноразовый код для каждого участника.'),
         el('label', { class: 'switch' }, el('input', { type: 'checkbox', name: 'confirmed', required: true }), 'Подтверждаю выпуск пакета'),
         formError(), el('div', { class: 'dialog-actions' }, submit('Выпустить пакет')));
     bindForm(form, async fields => {
@@ -251,11 +251,15 @@ export async function loadInvitations(viewer, signal, { create = false } = {}) {
     const pageSize = 100;
     const list = el('div');
     const message = notice('', true);
+    const roleFilter = selectField('Роль', 'role', [['', 'Все роли'], ...participantRoles]);
+    const statusFilter = selectField('Статус', 'status', [['', 'Все статусы'], ...Object.entries(invitationStatus).map(([key, value]) => [key, value[0]])]);
+    const filters = el('div', { class: 'filters' }, roleFilter, statusFilter);
     const root = el('section', {}, heading('Приглашения', 'Доступ участникам и жюри по коду.',
         button('Создать пакет', () => createBatch(refresh, signal), 'subtle'),
-        button('Создать приглашение', () => createInvitation(refresh, signal), 'primary')), message, list);
+        button('Создать приглашение', () => createInvitation(refresh, signal), 'primary')), filters, message, list);
     let requestedPage = 0;
     let currentPage = 1;
+    for (const filter of [roleFilter, statusFilter]) filter.querySelector('select').addEventListener('change', () => refresh(1), { signal });
 
     function showUses(invitation) {
         return viewDialog('Использование приглашения', signal, async () => {
@@ -280,13 +284,14 @@ export async function loadInvitations(viewer, signal, { create = false } = {}) {
         list.setAttribute('aria-busy', 'true');
         message.textContent = '';
         try {
-            const invitations = await request('/admin/invitations?page=' + page, { signal });
+            const query = new URLSearchParams({ page: String(page), role: roleFilter.querySelector('select').value, status: statusFilter.querySelector('select').value });
+            const invitations = await request('/admin/invitations?' + query, { signal });
             if (signal.aborted || requestedPage !== requestId) return;
             currentPage = page;
             list.replaceChildren(table(['Роль', 'Статус', 'Использовано', 'Кем создано', 'Дата создания', 'Действует до', ''],
                 invitations.map(invitation => [taggedRole(invitation.role), status(...invitationStatus[invitation.status]),
                     `${numbers.format(invitation.use_count)} из ${numbers.format(invitation.max_uses)}`, invitation.creator_name || '—',
-                    date(invitation.created_at), invitation.role === 'JURY' ? 'Бессрочно' : date(invitation.expires_at),
+                    date(invitation.created_at), invitation.expires_at ? date(invitation.expires_at) : 'Бессрочно',
                     canManageInvitation(viewer, invitation) && el('div', { class: 'toolbar' },
                         button('Использования', () => showUses(invitation), 'subtle compact'),
                         invitation.status === 'active' && button('Отозвать', () => revoke(invitation), 'danger compact')),

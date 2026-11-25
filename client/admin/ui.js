@@ -39,7 +39,13 @@ export function status(label, tone = '') {
 }
 
 export function textField(label, name, value = '', attributes = {}) {
-    return el('label', { class: 'field' }, label, el('input', { name, value, ...attributes }));
+    const input = el('input', { name, value, ...attributes });
+    if (attributes.type !== 'search') return el('label', { class: 'field' }, label, input);
+    const clear = button('×', () => { input.value = ''; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); }, 'search-clear', { 'aria-label': 'Очистить поиск' });
+    function syncClear() { clear.hidden = !input.value; }
+    input.addEventListener('input', syncClear);
+    syncClear();
+    return el('label', { class: 'field' }, label, el('span', { class: 'search-control' }, el('span', { class: 'search-icon', 'aria-hidden': 'true' }, '⌕'), input, clear));
 }
 
 let selectCounter = 0;
@@ -82,11 +88,8 @@ export function selectField(label, name, choices, selected = '') {
     });
     menu.addEventListener('toggle', () => trigger.setAttribute('aria-expanded', String(menu.matches(':popover-open'))));
     menu.addEventListener('keydown', event => {
-        if (event.key === 'Escape' || event.key === 'Tab') {
-            menu.hidePopover();
-            trigger.focus();
-            return;
-        }
+        if (event.key === 'Escape') { event.preventDefault(); menu.hidePopover(); trigger.focus(); return; }
+        if (event.key === 'Tab') { menu.hidePopover(); trigger.focus(); return; }
         const index = options.indexOf(document.activeElement);
         const next = { Home: 0, End: options.length - 1, ArrowDown: index + 1, ArrowUp: index - 1 }[event.key];
         if (next === undefined) return;
@@ -94,6 +97,7 @@ export function selectField(label, name, choices, selected = '') {
         options[Math.max(0, Math.min(options.length - 1, next))]?.focus();
     });
     select.addEventListener('change', sync);
+
     menu.append(...options);
     sync();
     return el('div', { class: 'field' }, caption, select, trigger, menu);
@@ -168,6 +172,7 @@ export function bindForm(form, action) {
         const submit = form.querySelector('[type=submit]');
         form.dataset.busy = 'true';
         submit.disabled = true;
+        submit.setAttribute('aria-busy', 'true');
         banner.textContent = '';
         try {
             await action(new FormData(form));
@@ -177,6 +182,7 @@ export function bindForm(form, action) {
         } finally {
             delete form.dataset.busy;
             submit.disabled = false;
+            submit.removeAttribute('aria-busy');
         }
     });
     return form;
