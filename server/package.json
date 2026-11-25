@@ -8,7 +8,8 @@
     "express": "^5.3.0",
     "express-rate-limit": "^8.7.4",
     "helmet": "^8.3.0",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "sharp": "0.35.5"
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env --env-file-if-exists=../.env server.js",
@@ -18,7 +19,8 @@
     "test": "node --test",
     "db:bot-preview": "node --env-file-if-exists=.env --env-file-if-exists=../.env database/import_bot_preview.js",
     "start:bot-preview": "node --env-file-if-exists=.env --env-file-if-exists=../.env server.js --bot-preview",
-    "db:sync-nominees": "node --env-file-if-exists=.env --env-file-if-exists=../.env database/sync_nominees.js"
+    "db:sync-nominees": "node --env-file-if-exists=.env --env-file-if-exists=../.env database/sync_nominees.js",
+    "db:media": "node --env-file-if-exists=.env --env-file-if-exists=../.env database/transfer_media.js"
   },
   "keywords": [],
   "author": "",
