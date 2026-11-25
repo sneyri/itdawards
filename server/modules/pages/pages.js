@@ -1,4 +1,5 @@
 import express, { Router } from 'express';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readSession } from '../auth/sessions.js';
 
@@ -22,7 +23,15 @@ router.get('/account', (req, res) => {
     return res.set('Cache-Control', 'no-store').redirect(destination);
 });
 
-router.use(express.static(dist, { index: false }));
+router.use(express.static(dist, {
+    index: false,
+    setHeaders(res, path) {
+        if (dirname(path) === join(dist, 'assets')
+            && /-[a-zA-Z0-9_-]{8,}\.(?:js|css|woff2?|png|webp|avif|svg|jpe?g)$/.test(basename(path))) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+    },
+}));
 router.use('/assets', express.static(assets));
 router.get(/^\/control\/([a-z-]+\.(?:css|js))$/, (req, res) => {
     res.set('Cache-Control', 'no-cache').sendFile(req.params[0], { root: control });

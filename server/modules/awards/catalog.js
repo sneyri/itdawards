@@ -4,6 +4,7 @@ import { activeVoting } from '../voting/tallies.js';
 import { sendError } from '../../middleware/errorHandler.js';
 import { parseId } from '../../middleware/parseId.js';
 import { authState } from '../auth/sessions.js';
+import { storageRoot, thumbnailMedia } from '../media/mediaStorage.js';
 
 function notFound(res) {
     return sendError(res, 404, 'nomination_not_found', 'Номинация не найдена.');
@@ -20,6 +21,7 @@ async function readCatalog(userId, includeNominees, nominationId = null) {
             FROM settings s WHERE s.id = 1
         )
         SELECT n.id, n.title, n.description, n.status, n.emoji, n.image_url, n.suggestions_preview,
+            $5::text || nomination_image.thumbnail_id AS thumbnail_url,
             (n.status = 'open' AND s.open) AS can_vote, s.results_published AS results_available,
             COALESCE(entry.nominee_count, 0) AS nominee_count,
             v.nominee_id AS voted_nominee_id, chosen.name AS voted_nominee_name,
@@ -32,15 +34,21 @@ async function readCatalog(userId, includeNominees, nominationId = null) {
         LEFT JOIN nominations n ON NOT n.archived AND n.status <> 'draft' AND ($3::int IS NULL OR n.id = $3)
         LEFT JOIN votes v ON v.nomination_id = n.id AND v.user_id = $1 AND v.voter_role IS NOT NULL
         LEFT JOIN nominees chosen ON chosen.id = v.nominee_id
+        LEFT JOIN catalog_images nomination_image ON $4::boolean
+            AND nomination_image.id = substring(n.image_url from '^/api/media/([a-f0-9]{64})$')
         LEFT JOIN LATERAL (
             SELECT count(*)::int AS nominee_count, CASE WHEN $2::boolean THEN json_agg(json_build_object(
                 'id', m.id, 'name', m.name, 'description', m.description, 'handle', m.handle, 'song', m.song,
-                'image_url', m.image_url, 'image_alt', m.image_alt, 'audio_url', m.audio_url, 'link_url', m.link_url
+                'image_url', m.image_url, 'thumbnail_url', $5::text || nominee_image.thumbnail_id,
+                'image_alt', m.image_alt, 'audio_url', m.audio_url, 'link_url', m.link_url
             ) ORDER BY m.sort_order, m.id) END AS nominees
-            FROM nominees m WHERE m.nomination_id = n.id AND NOT m.archived
+            FROM nominees m
+            LEFT JOIN catalog_images nominee_image ON $2::boolean AND $4::boolean
+                AND nominee_image.id = substring(m.image_url from '^/api/media/([a-f0-9]{64})$')
+            WHERE m.nomination_id = n.id AND NOT m.archived
         ) entry ON true
         ORDER BY n.sort_order, n.id
-    `, [userId, includeNominees, nominationId]);
+    `, [userId, includeNominees, nominationId, Boolean(storageRoot), thumbnailMedia.prefix]);
     return {
         data: rows.filter((row) => row.id !== null).map(({ voting, ...row }) => row),
         voting: rows[0].voting,

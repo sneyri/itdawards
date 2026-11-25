@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
 import { crc32 } from 'node:zlib';
-import pool, { transaction } from '../../database/db.js';
 import { sendError } from '../../middleware/errorHandler.js';
+import { saveCatalogMedia } from '../media/catalogMedia.js';
+import { imageMedia } from '../media/mediaStorage.js';
 
-export const rasterTypes = ['image/png', 'image/jpeg', 'image/webp'];
+export const rasterTypes = Object.keys(imageMedia.extensions);
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const jpegFrames = [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf];
 
@@ -80,35 +80,5 @@ export async function uploadCatalogImage(req, res) {
     if (!size || size.some((side) => side < 1 || side > 4096)) {
         return sendError(res, 400, 'invalid_image', 'Проверьте формат и размер изображения. Максимум 4096 × 4096 пикселей.');
     }
-    const id = createHash('sha256').update(bytes).digest('hex');
-    const allowed = await transaction(async (client) => {
-        const { rowCount } = await client.query(`
-            SELECT 1 FROM users WHERE id = $1 AND role IN ('MANAGER', 'SUPERADMIN') AND NOT blocked FOR SHARE
-        `, [req.user.id]);
-        if (!rowCount) return false;
-        const image = await client.query(`
-            INSERT INTO catalog_images (id, media_type, contents) VALUES ($1, $2, $3)
-            ON CONFLICT (id) DO NOTHING
-        `, [id, mediaType, bytes]);
-        if (image.rowCount) {
-            await client.query(`
-                INSERT INTO audit_logs (actor_id, action, target_type, target_id, details)
-                VALUES ($1, 'media.uploaded', 'catalog_image', $2, $3)
-            `, [req.user.id, id, { media_type: mediaType, size: bytes.length }]);
-        }
-        return true;
-    });
-    if (!allowed) return sendError(res, 403, 'forbidden', 'Недостаточно прав.');
-    return res.status(201).json({ data: { image_url: `/api/media/${id}` } });
-}
-
-export async function serveCatalogImage(req, res) {
-    if (!/^[a-f0-9]{64}$/.test(req.params.id)) return sendError(res, 404, 'not_found', 'Изображение не найдено.');
-    const { rows: [image] } = await pool.query('SELECT media_type, contents FROM catalog_images WHERE id = $1', [req.params.id]);
-    if (!image) return sendError(res, 404, 'not_found', 'Изображение не найдено.');
-    return res.set({
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Content-Security-Policy': 'sandbox; default-src \'none\'',
-        'X-Content-Type-Options': 'nosniff',
-    }).type(image.media_type).send(image.contents);
+    return saveCatalogMedia(req, res, imageMedia, mediaType, bytes);
 }
