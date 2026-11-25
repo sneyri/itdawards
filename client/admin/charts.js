@@ -99,7 +99,7 @@ export function activityChart(trends, signal) {
         const started = performance.now();
         function step(now) {
             if (signal?.aborted || !canvas.isConnected) return;
-            const still = reducedMotion.matches;
+            const still = reducedMotion.matches || document.hidden || document.body.classList.contains('effects-off');
             const fraction = still ? 1 : Math.min(1, (now - started) / 420);
             draw(1 - (1 - fraction) ** 3);
             if (fraction < 1) animation = requestAnimationFrame(step);

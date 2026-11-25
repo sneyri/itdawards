@@ -20,11 +20,14 @@ const invitationDetails = `SELECT i.id, i.role, i.created_at, i.expires_at, i.ma
 
 export async function listInvitations(req, res) {
     const page = req.query.page === undefined ? 1 : Number(req.query.page);
-    if (!Number.isInteger(page) || page < 1 || page > 10000 || Array.isArray(req.query.page)) {
+    const { role = '', status = '' } = req.query;
+    if (!Number.isInteger(page) || page < 1 || page > 10000 || Array.isArray(req.query.page)
+        || !['', 'USER', 'JURY'].includes(role) || !['', 'active', 'used', 'revoked', 'expired'].includes(status)) {
         return sendError(res, 400, 'invalid_input', 'Некорректный номер страницы.');
     }
-    const { rows } = await pool.query(`${invitationDetails}
-        ORDER BY i.created_at DESC, i.id DESC LIMIT $1 OFFSET $2`, [pageSize + 1, (page - 1) * pageSize]);
+    const { rows } = await pool.query(`SELECT * FROM (${invitationDetails}) AS invitation
+        WHERE ($1 = '' OR role = $1) AND ($2 = '' OR status = $2)
+        ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4`, [role, status, pageSize + 1, (page - 1) * pageSize]);
     return res.json({ data: rows.slice(0, pageSize), pagination: { page, hasMore: rows.length > pageSize } });
 }
 
