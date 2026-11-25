@@ -3,13 +3,13 @@ import { ArrowUpRight, Check } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Category } from '../data/categories'
 import { groupLabels } from '../data/categories'
-import { useVotes } from '../context/VotesContext'
 import { CategoryImage } from './CategoryImage'
 
-export const CategoryRow = memo(function CategoryRow({ category }: { category: Category }) {
-  const { votes, voteNames } = useVotes()
-  const isVoted = votes[category.id] !== undefined
-  const selectedName = voteNames[category.id]
+export const CategoryRow = memo(function CategoryRow({ category, isVoted, selectedName }: {
+  category: Category
+  isVoted: boolean
+  selectedName?: string
+}) {
   const choice = selectedName ? `Ваш выбор: ${selectedName}` : 'Голос учтён'
 
   return (

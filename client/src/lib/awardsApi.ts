@@ -8,6 +8,7 @@ type CatalogueNominee = {
   description: string
   song: string | null
   image_url: string | null
+  thumbnail_url?: string | null
   image_alt: string | null
   link_url: string | null
   audio_url: string | null
@@ -19,11 +20,12 @@ type CatalogueEntry = {
   description: string
   status: CategoryStatus
   image_url: string | null
+  thumbnail_url?: string | null
   can_vote: boolean
   results_available: boolean
   voted_nominee_id: number | null
   voted_nominee_name: string | null
-  nominees: CatalogueNominee[]
+  nominees?: CatalogueNominee[]
 }
 
 export type ResultEntry = {
@@ -47,7 +49,7 @@ export type AuthState = {
   botUrl: string | null
 }
 
-type VotingState = {
+export type VotingState = {
   allowVoteChanges: boolean
   startsAt: string | null
   endsAt: string | null
@@ -85,11 +87,11 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
   return (await fetchEnvelope<T>(path, options)).data
 }
 
-function safeMediaUrl(value: string | null): string | null {
+function safeMediaUrl(value: string | null | undefined): string | null {
   if (!value) return null
   try {
     if (/^\/(?:assets|images|audio)\//.test(value) && !value.includes('\\')) return value
-    if (/^\/api\/(?:media|audio)\/[a-f0-9]{64}$/.test(value)) return value
+    if (/^\/api\/(?:media(?:\/thumbnails)?|audio)\/[a-f0-9]{64}$/.test(value)) return value
     const url = new URL(value)
     return url.protocol === 'https:' && !url.username && !url.password ? url.href : null
   } catch {
@@ -97,9 +99,7 @@ function safeMediaUrl(value: string | null): string | null {
   }
 }
 
-export async function fetchCatalogue(signal?: AbortSignal) {
-  const { data: rows, auth, voting } = await fetchEnvelope<CatalogueEntry[]>('/nominations?include=nominees', { signal })
-  if (!auth || !voting) throw new Error('Сервер не вернул статус входа или голосования.')
+function parseCatalogue(rows: CatalogueEntry[]) {
   const votes: Record<string, string> = {}
   const voteNames: Record<string, string> = {}
   const usedSlugs = new Set<string>()
@@ -117,9 +117,10 @@ export async function fetchCatalogue(signal?: AbortSignal) {
       group,
       status: row.status,
       imageUrl: safeMediaUrl(row.image_url),
+      thumbnailUrl: safeMediaUrl(row.thumbnail_url),
       canVote: row.can_vote,
       resultsAvailable: row.results_available,
-      nominees: row.nominees.map((nominee) => {
+      nominees: (row.nominees ?? []).map((nominee) => {
         const linkUrl = safeMediaUrl(nominee.link_url)
         const legacyTrackUrl = id === 'track-goda' && linkUrl && /\.(?:mp3|wav|ogg|m4a|aac|flac)(?:[?#]|$)/i.test(linkUrl)
           ? linkUrl
@@ -131,6 +132,7 @@ export async function fetchCatalogue(signal?: AbortSignal) {
           tagline: nominee.description,
           song: nominee.song ?? null,
           photo: safeMediaUrl(nominee.image_url),
+          thumbnailUrl: safeMediaUrl(nominee.thumbnail_url),
           photoAlt: nominee.image_alt ?? null,
           linkUrl,
           audio: safeMediaUrl(nominee.audio_url) ?? legacyTrackUrl,
@@ -138,7 +140,31 @@ export async function fetchCatalogue(signal?: AbortSignal) {
       }),
     }
   })
-  return { categories, votes, voteNames, auth, voting }
+  return { categories, votes, voteNames }
+}
+
+export async function fetchNominationIndex() {
+  const { data, voting } = await fetchEnvelope<CatalogueEntry[]>('/nominations')
+  if (!voting) throw new Error('Сервер не вернул статус голосования.')
+  return { ...parseCatalogue(data), voting }
+}
+
+export async function fetchCatalogue() {
+  const { data, auth, voting } = await fetchEnvelope<CatalogueEntry[]>('/nominations?include=nominees')
+  if (!auth || !voting) throw new Error('Сервер не вернул статус входа или голосования.')
+  return { ...parseCatalogue(data), auth, voting }
+}
+
+export async function fetchNomination(id: number) {
+  const { data, auth, voting } = await fetchEnvelope<CatalogueEntry>(`/nominations/${id}`)
+  if (!auth || !voting) throw new Error('Сервер не вернул статус входа или голосования.')
+  const { categories: [category] } = parseCatalogue([data])
+  return { category, auth, voting,
+    nomineeId: data.voted_nominee_id, nomineeName: data.voted_nominee_name }
+}
+
+export function fetchAuth() {
+  return request<AuthState>('/auth/me')
 }
 
 function post<T>(path: string, body: object) {
@@ -166,6 +192,6 @@ export function fetchResults(categoryId: number, signal: AbortSignal) {
   return request<ResultEntry[]>(`/nominations/${categoryId}/results`, { signal })
 }
 
-export function fetchMyVotes(signal: AbortSignal) {
-  return request<MyVote[]>('/votes/me', { signal })
+export function fetchMyVotes() {
+  return request<MyVote[]>('/votes/me')
 }

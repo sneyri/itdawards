@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import { FlappyGame } from './FlappyGame'
-import { Minesweeper } from './Minesweeper'
+import { lazy, Suspense, useEffect, useState } from 'react'
+
+const FlappyGame = lazy(() => import('./FlappyGame').then(({ FlappyGame }) => ({ default: FlappyGame })))
+const Minesweeper = lazy(() => import('./Minesweeper').then(({ Minesweeper }) => ({ default: Minesweeper })))
 
 type Game = 'flappy' | 'mines' | null
 
@@ -20,5 +21,9 @@ export function SecretGames() {
 
   if (!game) return null
   const close = () => setGame(null)
-  return game === 'flappy' ? <FlappyGame onClose={close} /> : <Minesweeper onClose={close} />
+  return (
+    <Suspense fallback={null}>
+      {game === 'flappy' ? <FlappyGame onClose={close} /> : <Minesweeper onClose={close} />}
+    </Suspense>
+  )
 }

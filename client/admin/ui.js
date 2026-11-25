@@ -118,6 +118,27 @@ export function definition(rows) {
     return el('dl', { class: 'definition' }, rows.map(([key, value]) => [el('dt', {}, key), el('dd', {}, value ?? '—')]));
 }
 
+const panelData = new Map();
+
+export function clearPanelData() {
+    panelData.clear();
+}
+
+export function readPanelData(path) {
+    const cached = panelData.get(path);
+    if (cached && Date.now() < cached.expires) return cached.promise;
+    const entry = { expires: Infinity };
+    entry.promise = request(path).then(data => {
+        entry.expires = Date.now() + 15_000;
+        return data;
+    }, error => {
+        if (panelData.get(path) === entry) panelData.delete(path);
+        throw error;
+    });
+    panelData.set(path, entry);
+    return entry.promise;
+}
+
 export async function request(path, { method = 'GET', data, file, signal } = {}) {
     const options = { method, credentials: 'same-origin', signal, cache: 'no-store' };
     if (file) {
@@ -135,6 +156,7 @@ export async function request(path, { method = 'GET', data, file, signal } = {})
         error.code = result?.error?.code;
         throw error;
     }
+    if (method !== 'GET') clearPanelData();
     return result.data;
 }
 

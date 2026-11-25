@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
@@ -15,30 +15,14 @@ import { useVotes } from '../context/VotesContext'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { PosterButton } from '../components/PosterButton'
 import { AuthAction } from '../components/AuthAction'
-import { fetchMyVotes } from '../lib/awardsApi'
-import type { MyVote } from '../lib/awardsApi'
 
 export function MyVotes() {
   usePageTitle('Мой голос')
-  const { categories, auth, voting } = useVotes()
-  const [response, setResponse] = useState<{ accountId: string; records: MyVote[] }>()
-  const [error, setError] = useState('')
-  const [attempt, setAttempt] = useState(0)
+  const { categories, auth, voting, history, authReady, authError, retryAuth } = useVotes()
   const accountId = auth.user?.id
-  const records = response?.accountId === accountId ? response?.records : undefined
+  const records = history.data
+  const error = authError ?? history.error
   const categoryById = new Map(categories.map((category) => [category.apiId, category]))
-
-  useEffect(() => {
-    if (!accountId) return
-    const controller = new AbortController()
-    fetchMyVotes(controller.signal).then(
-      (records) => setResponse({ accountId, records }),
-      (reason: unknown) => {
-        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить голоса.')
-      },
-    )
-    return () => controller.abort()
-  }, [accountId, attempt])
 
   const ballot = useMemo(() => {
     const byId = new Map(categories.map((category) => [category.apiId, category]))
@@ -70,16 +54,14 @@ export function MyVotes() {
 
       <section className="section my-votes-section">
         <div className="container">
-          {accountId && !records ? (
+          {!authReady || (accountId && !records) ? (
             <div className="empty-state" role={error ? 'alert' : 'status'}>
               <h2>{error ? 'Не удалось загрузить голоса' : 'Загружаем голоса…'}</h2>
               {error && (
                 <>
-                  <p>{error}</p>
-                  <button type="button" className="button button--gold" onClick={() => {
-                    setError('')
-                    setAttempt(attempt + 1)
-                  }}>Повторить</button>
+                  <p>{error.message}</p>
+                  <button type="button" className="button button--gold" onClick={() =>
+                    void (authError ? retryAuth() : history.reload())}>Повторить</button>
                 </>
               )}
             </div>

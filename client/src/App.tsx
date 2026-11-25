@@ -1,14 +1,18 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import type { Location } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { SecretGames } from './components/SecretGames'
-import { CategoryDetail } from './pages/CategoryDetail'
-import { Home } from './pages/Home'
-import { MyVotes } from './pages/MyVotes'
-import { Nominations } from './pages/Nominations'
 import { NotFound } from './pages/NotFound'
-import { Questions } from './pages/Questions'
-import { SignIn } from './pages/SignIn'
+
+import { category, home, myVotes, nominations, questions, signIn } from './lib/pageModules'
+
+const CategoryDetail = lazy(() => category().then(({ CategoryDetail }) => ({ default: CategoryDetail })))
+const Home = lazy(() => home().then(({ Home }) => ({ default: Home })))
+const MyVotes = lazy(() => myVotes().then(({ MyVotes }) => ({ default: MyVotes })))
+const Nominations = lazy(() => nominations().then(({ Nominations }) => ({ default: Nominations })))
+const Questions = lazy(() => questions().then(({ Questions }) => ({ default: Questions })))
+const SignIn = lazy(() => signIn().then(({ SignIn }) => ({ default: SignIn })))
 
 export default function App() {
   const location = useLocation()
@@ -31,7 +35,7 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
-      {background && <SignIn modal />}
+      {background && <Suspense fallback={null}><SignIn modal /></Suspense>}
       <SecretGames />
     </>
   )

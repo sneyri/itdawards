@@ -91,9 +91,11 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
     if (!audio || failed) return
     if (audio.paused) {
       window.dispatchEvent(new CustomEvent('itd:audio-play', { detail: audio }))
+      if (!audio.hasAttribute('src')) audio.src = src
       try {
         await audio.play()
-      } catch {
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
         setFailed(true)
         setPlaying(false)
       }
@@ -120,7 +122,7 @@ export function TrackPlayer({ src, title }: TrackPlayerProps) {
 
   return (
     <div className={`track-player ${failed ? 'has-error' : ''}`} role="group" aria-label={`Аудиофрагмент: ${title}`}>
-      <audio ref={audioRef} src={src} preload="none" onLoadedMetadata={syncMeta} />
+      <audio ref={audioRef} preload="none" />
       <button
         type="button"
         className="track-player__play"

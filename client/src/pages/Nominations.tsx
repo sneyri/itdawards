@@ -7,6 +7,7 @@ import { SearchField } from '../components/SearchField'
 import { CategoryRow } from '../components/CategoryRow'
 import { useVotes } from '../context/VotesContext'
 import { usePageTitle } from '../hooks/usePageTitle'
+import { CatalogueStatus } from '../components/CatalogueStatus'
 
 type Filter = 'all' | 'voted' | 'unvoted'
 
@@ -18,6 +19,11 @@ const filterLabels: Record<Filter, string> = {
 
 export function Nominations() {
   usePageTitle('Номинации')
+  const { catalogue } = useVotes()
+  return catalogue.data ? <NominationsList /> : <CatalogueStatus {...catalogue} />
+}
+
+function NominationsList() {
   const { categories, votes, voteNames, voting } = useVotes()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -132,7 +138,8 @@ export function Nominations() {
           {filteredCategories.length > 0 ? (
             <div className="category-list">
               {filteredCategories.map((categoryItem) => (
-                <CategoryRow category={categoryItem} key={categoryItem.id} />
+                  <CategoryRow category={categoryItem} isVoted={Boolean(votes[categoryItem.id])}
+                    selectedName={voteNames[categoryItem.id]} key={categoryItem.id} />
               ))}
             </div>
           ) : (

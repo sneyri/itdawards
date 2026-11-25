@@ -16,6 +16,7 @@ import { EVENT, eventDateLabel } from '../data/event'
 import { useVotes } from '../context/VotesContext'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { CategoryRow } from '../components/CategoryRow'
+import { CatalogueStatus } from '../components/CatalogueStatus'
 import { Countdown } from '../components/Countdown'
 import { DeadlineDate } from '../components/DeadlineDate'
 import { Reveal } from '../components/Reveal'
@@ -37,13 +38,13 @@ const wordmarkLines = [
 
 export function Home() {
   usePageTitle('ITD AWARDS 2026')
-  const { categories, votedCount, voting } = useVotes()
+  const { categories, votedCount, voting, votingReady, index, votes, voteNames } = useVotes()
   const featuredCategories = useMemo(() => categories.filter((categoryItem) =>
     featuredIds.includes(categoryItem.id),
   ), [categories])
   const tickerItems = useMemo(() => [...categories, ...categories], [categories])
   const deadline = eventDateLabel(voting.endsAt)
-  const deadlineText = voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'
+  const deadlineText = !votingReady ? '—' : voting.open ? deadline ?? 'Открыто' : voting.resultsPublished ? 'Итоги опубликованы' : 'Закрыто'
   const [weirdDate] = useState(() => Math.random() < 0.1)
   const ceremony = eventDateLabel(EVENT.ceremonyAt)
   const voteLabel = voting.open
@@ -225,8 +226,10 @@ export function Home() {
           <Reveal>
             <div className="category-list">
               {featuredCategories.map((categoryItem) => (
-                <CategoryRow category={categoryItem} key={categoryItem.id} />
+                <CategoryRow category={categoryItem} isVoted={Boolean(votes[categoryItem.id])}
+                  selectedName={voteNames[categoryItem.id]} key={categoryItem.id} />
               ))}
+              {!votingReady && <CatalogueStatus {...index} />}
             </div>
           </Reveal>
         </div>

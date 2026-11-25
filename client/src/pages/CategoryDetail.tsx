@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import type { MouseEvent as ReactMouseEvent, RefObject } from 'react'
 import {
   ArrowLeft,
@@ -34,6 +34,8 @@ import { formatNumber, pluralize } from '../lib/format'
 import { NotFound } from './NotFound'
 import { JuryReview } from '../components/JuryReview'
 import { EmojiBurst } from '../components/EmojiBurst'
+import { CatalogueStatus } from '../components/CatalogueStatus'
+import { ApiError } from '../lib/awardsApi'
 
 function shuffleNominees(nominees: Nominee[]): Nominee[] {
   const result = [...nominees]
@@ -47,14 +49,11 @@ function shuffleNominees(nominees: Nominee[]): Nominee[] {
 }
 
 export function CategoryDetail() {
-  const { categoryId } = useParams()
-  const { categories } = useVotes()
-  const category = categories.find((item) => item.id === categoryId || String(item.apiId) === categoryId)
-  usePageTitle(category ? category.title : 'Номинация не найдена')
-
-  if (!category) return <NotFound />
-
-  return <CategoryView category={category} key={category.id} />
+  const { detail } = useVotes()
+  usePageTitle(detail.category?.title ?? 'Номинация')
+  if (detail.category) return <CategoryView category={detail.category} key={detail.category.apiId} />
+  if (detail.data || (detail.error instanceof ApiError && detail.error.status === 404)) return <NotFound />
+  return <CatalogueStatus {...detail} />
 }
 
 function CategoryView({ category }: { category: Category }) {
@@ -92,8 +91,8 @@ function CategoryView({ category }: { category: Category }) {
   const status = categoryStatusLabel(category)
   const deadline = category.canVote ? eventDateLabel(voting.endsAt) : null
   const currentIndex = categories.findIndex((categoryItem) => categoryItem.id === category.id)
-  const previousCategory = categories[(currentIndex - 1 + categories.length) % categories.length]
-  const nextCategory = categories[(currentIndex + 1) % categories.length]
+  const previousCategory = categories[(currentIndex - 1 + categories.length) % categories.length] ?? category
+  const nextCategory = categories[(currentIndex + 1) % categories.length] ?? category
   const lightboxItems: LightboxItem[] = orderedNominees.map((nomineeItem) => ({
     nominee: nomineeItem,
     categoryId: category.id,
@@ -210,7 +209,7 @@ function CategoryView({ category }: { category: Category }) {
             <div className="category-head__content">
               <div className="category-head__title-row">
                 <span className="category-head__icon" aria-hidden="true">
-                  <CategoryImage category={category} size={30} />
+                  <CategoryImage category={category} size={30} eager />
                 </span>
                 <div>
                   <p className="eyebrow">
@@ -491,10 +490,11 @@ function NomineeCard({
             nominee={nominee}
             categoryId={categoryId}
             className="nominee__photo-img"
+            eager={index === 0}
           />
         ) : (
           <span className="nominee__art" aria-hidden="true">
-            <NomineeArtwork nominee={nominee} categoryId={categoryId} />
+            <NomineeArtwork nominee={nominee} categoryId={categoryId} eager={index === 0} />
           </span>
         )}
 
@@ -530,7 +530,7 @@ function NomineeCard({
             Песня: {nominee.song}
           </span>
         )}
-        {nominee.audio && <TrackPlayer src={nominee.audio} title={nominee.name} />}
+        {nominee.audio && <TrackPlayer key={nominee.audio} src={nominee.audio} title={nominee.name} />}
       </div>
     </article>
   )

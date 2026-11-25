@@ -1,7 +1,7 @@
-import { memo, useEffect, useId, useState } from 'react'
+import { memo, useId, useState } from 'react'
 import type { Nominee } from '../data/categories'
 import { makeInitials } from '../lib/format'
-import { webpSource } from '../lib/imageSource'
+import { useImageSource } from '../lib/imageSource'
 import { getNomineeVisual } from '../lib/nomineeVisual'
 
 type Palette = {
@@ -120,13 +120,16 @@ type NomineeArtworkProps = {
   nominee: Nominee
   categoryId: string
   className?: string
+  eager?: boolean
+  fullSize?: boolean
 }
 
-export const NomineeArtwork = memo(function NomineeArtwork({ nominee, categoryId, className }: NomineeArtworkProps) {
-  const [failedPhoto, setFailedPhoto] = useState<string | null>(null)
-  const [fallbackFailed, setFallbackFailed] = useState(false)
-  useEffect(() => setFallbackFailed(false), [nominee.id])
-  const visual = getNomineeVisual(categoryId, nominee, failedPhoto)
+export const NomineeArtwork = memo(function NomineeArtwork({
+  nominee, categoryId, className, eager = false, fullSize = false,
+}: NomineeArtworkProps) {
+  const { source, fail } = useImageSource(nominee.photo, nominee.thumbnailUrl, fullSize)
+  const [fallbackFailed, setFallbackFailed] = useState<string>()
+  const visual = source ? 'photo' : getNomineeVisual(categoryId, nominee, nominee.photo)
   const fallbackImage = categoryId === 'king-itd'
     ? '/fallback/king.png'
     : categoryId === 'queen-itd'
@@ -134,19 +137,19 @@ export const NomineeArtwork = memo(function NomineeArtwork({ nominee, categoryId
       : null
   const classes = ['nominee-art', `nominee-art--${visual}`, className].filter(Boolean).join(' ')
 
-  if (visual === 'photo') {
-    const webp = webpSource(nominee.photo)
+  if (source) {
     return (
       <picture className="nominee-art-picture">
-        {webp && <source srcSet={webp} type="image/webp" />}
         <img
           className={classes}
-          src={nominee.photo ?? undefined}
+          src={source}
           alt={nominee.photoAlt ?? nominee.name}
-          loading="lazy"
+          loading={eager ? 'eager' : 'lazy'}
+          fetchPriority={eager ? 'high' : undefined}
+          decoding="async"
           draggable={false}
           referrerPolicy="no-referrer"
-          onError={() => setFailedPhoto(nominee.photo)}
+          onError={fail}
         />
       </picture>
     )
@@ -157,15 +160,15 @@ export const NomineeArtwork = memo(function NomineeArtwork({ nominee, categoryId
   }
 
   if (visual === 'portrait') {
-    if (failedPhoto && fallbackImage && !fallbackFailed) {
+    if ((nominee.photo || nominee.thumbnailUrl) && fallbackImage && fallbackFailed !== nominee.id) {
       return (
         <img
           className={classes}
           src={fallbackImage}
           alt={nominee.photoAlt ?? nominee.name}
-          loading="lazy"
+          loading={eager ? 'eager' : 'lazy'}
           draggable={false}
-          onError={() => setFallbackFailed(true)}
+          onError={() => setFallbackFailed(nominee.id)}
         />
       )
     }

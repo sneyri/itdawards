@@ -1,5 +1,5 @@
 import { bindForm, button, confirmAction, el, formError, heading, nominationStatuses,
-    numbers, request, selectField, showDialog, status, submit, table, textField, toast, toggle } from './ui.js';
+    numbers, readPanelData, request, selectField, showDialog, status, submit, table, textField, toast, toggle } from './ui.js';
 
 function safeImage(value) {
     if (!value) return null;
@@ -182,7 +182,8 @@ export async function loadCatalog(_operator, signal, { nominationId, nomineeId }
     archive.querySelector('input').addEventListener('change', event => { showArchived = event.target.checked; draw(); });
 
     async function readRows() {
-        const [catalog, stats] = await Promise.all([request('/admin/catalog', { signal }), request('/admin/stats', { signal })]);
+        const [catalog, stats] = await Promise.all([readPanelData('/admin/catalog'), readPanelData('/admin/stats')]);
+        if (signal.aborted) return;
         rows = catalog;
         voteCounts = new Map(stats.nomination_votes.map(row => [row.id, row.vote_count]));
         draw();

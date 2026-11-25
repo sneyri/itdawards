@@ -8,6 +8,7 @@ export type Nominee = {
   tagline: string
   song: string | null
   photo: string | null
+  thumbnailUrl: string | null
   photoAlt: string | null
   linkUrl: string | null
   audio: string | null
@@ -21,6 +22,7 @@ export type Category = {
   description: string
   status: CategoryStatus
   imageUrl: string | null
+  thumbnailUrl: string | null
   canVote: boolean
   resultsAvailable: boolean
   nominees: Nominee[]

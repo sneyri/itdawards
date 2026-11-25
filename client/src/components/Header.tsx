@@ -15,7 +15,7 @@ export function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const location = useLocation()
-  const { auth, voting } = useVotes()
+  const { auth, voting, votingReady } = useVotes()
   const role = auth.user?.role
   const navItems = role === 'SUPERADMIN' || role === 'MANAGER'
     ? [...publicNavItems, { to: '/admin', label: 'Админка' }]
@@ -81,7 +81,7 @@ export function Header() {
         <div className="container status-bar__inner">
           <span className="status-bar__main">
             {votingOpen && <span className="status-dot" aria-hidden="true" />}
-            {votingOpen ? 'Голосование открыто' : 'Голосование сейчас закрыто'}
+            {votingReady ? (votingOpen ? 'Голосование открыто' : 'Голосование сейчас закрыто') : 'ITD Awards 2026'}
           </span>
           <span className="status-bar__details">
             {votingOpen && deadline && <span className="status-bar__date">до {deadline}</span>}

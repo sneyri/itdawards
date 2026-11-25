@@ -1,22 +1,34 @@
-import { loadInvitations, loadUsers } from './access.js';
-import { loadCatalog } from './catalog.js';
 import { activityChart } from './charts.js';
-import { loadDatabase, loadSecurity } from './management.js';
-import { bindForm, button, confirmAction, date, dateInput, definition, el, formError,
-    heading, nominationStatuses, notice, numbers, request, roles, selectField, status, submit, table, textField, toast, toggle } from './ui.js';
+import { bindForm, button, clearPanelData, confirmAction, date, dateInput, definition, el, formError,
+    heading, nominationStatuses, notice, numbers, readPanelData, request, roles, selectField, status, submit, table, textField, toast, toggle } from './ui.js';
+
+const panelLoader = (module, name) => async (operator, signal) => {
+    const implementation = await module();
+    if (!signal.aborted) return implementation[name](operator, signal);
+};
+const loadAccess = () => import('./access.js');
+const loadManagement = () => import('./management.js');
+const loadCatalogModule = () => import('./catalog.js');
+
+async function openCatalog(operator, signal) {
+    const [implementation] = await Promise.all([
+        loadCatalogModule(), readPanelData('/admin/catalog'), readPanelData('/admin/stats'),
+    ]);
+    if (!signal.aborted) return implementation.loadCatalog(operator, signal);
+}
 
 const view = document.getElementById('view');
 const navigation = document.getElementById('navigation');
 const panels = [
     ['overview', 'Обзор', loadOverview, '◫'],
-    ['catalog', 'Каталог', loadCatalog, '◇'],
+    ['catalog', 'Каталог', openCatalog, '◇'],
     ['voting', 'Голосование', loadVoting, '▤'],
     ['jury-votes', 'Голоса жюри', loadJuryVotes, '✦'],
-    ['users', 'Пользователи', loadUsers, '◎'],
-    ['invitations', 'Приглашения', loadInvitations, '＋'],
+    ['users', 'Пользователи', panelLoader(loadAccess, 'loadUsers'), '◎'],
+    ['invitations', 'Приглашения', panelLoader(loadAccess, 'loadInvitations'), '＋'],
     ['system', 'Состояние сервисов', loadSystem, '⌁'],
-    ['database', 'База данных', loadDatabase, '▦', 'SUPERADMIN'],
-    ['security', 'Безопасность', loadSecurity, '◈', 'SUPERADMIN'],
+    ['database', 'База данных', panelLoader(loadManagement, 'loadDatabase'), '▦', 'SUPERADMIN'],
+    ['security', 'Безопасность', panelLoader(loadManagement, 'loadSecurity'), '◈', 'SUPERADMIN'],
 ];
 const serviceNames = { site: 'Публичный сайт', backend: 'Express Backend', postgresql: 'PostgreSQL', telegram: 'Telegram-бот' };
 const serviceStatuses = { ok: ['В работе', 'ok'], down: ['Недоступен', 'bad'],
@@ -32,6 +44,7 @@ let viewer;
 let visible = [];
 let pending;
 let currentTelemetry;
+let telemetryRequest;
 let telemetryStarted = false;
 const runtime = new AbortController();
 
@@ -65,7 +78,7 @@ function panel(title, body, action, description) {
 }
 
 async function loadOverview(_operator, signal) {
-    const stats = await request('/admin/stats', { signal });
+    const stats = await readPanelData('/admin/stats');
     const services = el('div');
     const phase = el('div');
     const votes = el('strong', { class: 'stat-value' });
@@ -166,7 +179,7 @@ async function loadVoting(operator, signal) {
     const owner = operator.role === 'SUPERADMIN';
     const [settings, stats, results] = await Promise.all([
         request('/admin/settings', { signal }),
-        request('/admin/stats', { signal }),
+        readPanelData('/admin/stats'),
         owner ? request('/admin/results', { signal }) : [],
     ]);
     const publication = settings.results_published;
@@ -311,7 +324,7 @@ function uptime(seconds) {
 }
 
 async function loadSystem(_operator, signal) {
-    const report = currentTelemetry ?? await request('/admin/nexus/telemetry', { signal });
+    const report = currentTelemetry ?? await pollTelemetry();
     const check = el('div');
     const services = el('div');
     const errors = el('div');
@@ -362,24 +375,27 @@ function updateSystemBar(report) {
     }), status(report ? formatPhase(report.phase) : 'Этап неизвестен', report?.phase === 'voting' ? 'ok' : 'warn'));
 }
 
+function pollTelemetry() {
+    if (telemetryRequest) return telemetryRequest;
+    telemetryRequest = request('/admin/nexus/telemetry', { signal: runtime.signal }).then(report => {
+        currentTelemetry = report;
+    }, error => {
+        if (error.status === 401) fail(error);
+        currentTelemetry = null;
+    }).then(() => {
+        if (runtime.signal.aborted) return currentTelemetry;
+        updateSystemBar(currentTelemetry);
+        window.dispatchEvent(new CustomEvent('admin:telemetry', { detail: { report: currentTelemetry } }));
+        return currentTelemetry;
+    }).finally(() => { telemetryRequest = undefined; });
+    return telemetryRequest;
+}
+
 function startTelemetry() {
     if (telemetryStarted) return;
     telemetryStarted = true;
-    let inFlight = false;
-    async function poll() {
-        if (inFlight || document.hidden || runtime.signal.aborted) return;
-        inFlight = true;
-        try {
-            currentTelemetry = await request('/admin/nexus/telemetry', { signal: runtime.signal });
-        } catch (error) {
-            if (error.status === 401) fail(error);
-            currentTelemetry = null;
-        } finally {
-            inFlight = false;
-        }
-        if (runtime.signal.aborted) return;
-        updateSystemBar(currentTelemetry);
-        window.dispatchEvent(new CustomEvent('admin:telemetry', { detail: { report: currentTelemetry } }));
+    function poll() {
+        if (!document.hidden && !runtime.signal.aborted) void pollTelemetry();
     }
     const interval = setInterval(poll, 10_000);
     runtime.signal.addEventListener('abort', () => clearInterval(interval), { once: true });
@@ -442,13 +458,25 @@ async function init() {
                 el('span', { 'aria-hidden': 'true', class: 'nav-icon' }, icon), label)));
         startTelemetry();
         await showPanel();
+        if (location.hash === '' || location.hash === '#overview') {
+            const warmCatalog = () => {
+                if (!document.hidden && !navigator.connection?.saveData && !runtime.signal.aborted) {
+                    void loadCatalogModule().catch(() => {});
+                }
+            };
+            if ('requestIdleCallback' in window) window.requestIdleCallback(warmCatalog);
+            else setTimeout(warmCatalog, 200);
+        }
     } catch (error) {
         fail(error);
     }
 }
 
 window.addEventListener('hashchange', () => { if (viewer) showPanel(); });
-document.getElementById('refresh-panel').addEventListener('click',() => { if (viewer) showPanel(); });
+document.getElementById('refresh-panel').addEventListener('click', () => {
+    clearPanelData();
+    if (viewer) showPanel();
+});
 window.addEventListener('pagehide', event => { if (!event.persisted) { runtime.abort(); pending?.abort(); } });
 document.querySelector('.skip').addEventListener('click', event => {
     event.preventDefault();

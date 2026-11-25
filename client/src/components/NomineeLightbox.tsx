@@ -105,6 +105,8 @@ export function NomineeLightbox({ items, index, onClose, onNavigate }: NomineeLi
               nominee={item.nominee}
               categoryId={item.categoryId}
               className="lightbox__art"
+              eager
+              fullSize
             />
           </div>
           {items.length > 1 && (
