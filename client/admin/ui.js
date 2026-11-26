@@ -1,3 +1,7 @@
+import { el } from './dom.js';
+export { el } from './dom.js';
+export { selectField } from './select-field.js';
+
 export const roles = { USER: 'Участник', JURY: 'Жюри', MANAGER: 'Администратор', SUPERADMIN: 'Владелец' };
 export const nominationStatuses = { draft: 'Черновик', open: 'Открыта', closed: 'Закрыта' };
 export const numbers = new Intl.NumberFormat('ru-RU');
@@ -11,17 +15,6 @@ export function dateInput(value) {
     if (!value) return '';
     const timestamp = new Date(value);
     return new Date(+timestamp - timestamp.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-export function el(tag, attributes = {}, ...children) {
-    const node = document.createElement(tag);
-    for (const [name, value] of Object.entries(attributes)) {
-        if (value == null || value === false) continue;
-        if (name.startsWith('on')) node.addEventListener(name.slice(2).toLowerCase(), value);
-        else node.setAttribute(name, value === true ? '' : value);
-    }
-    node.append(...children.flat(Infinity).filter(child => child != null && child !== false));
-    return node;
 }
 
 export function button(label, action, style = '', attributes = {}) {
@@ -40,67 +33,15 @@ export function status(label, tone = '') {
 
 export function textField(label, name, value = '', attributes = {}) {
     const input = el('input', { name, value, ...attributes });
-    if (attributes.type !== 'search') return el('label', { class: 'field' }, label, input);
+    if (attributes.type === 'file' || attributes.type === 'checkbox') return el('label', { class: 'field' }, label, input);
+    if (attributes.type !== 'search') return el('label', { class: 'field kit-field' }, label,
+        el('span', { class: 'kit-input-wrap' }, input));
     const clear = button('×', () => { input.value = ''; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); }, 'search-clear', { 'aria-label': 'Очистить поиск' });
     function syncClear() { clear.hidden = !input.value; }
     input.addEventListener('input', syncClear);
     syncClear();
-    return el('label', { class: 'field' }, label, el('span', { class: 'search-control' }, el('span', { class: 'search-icon', 'aria-hidden': 'true' }, '⌕'), input, clear));
-}
-
-let selectCounter = 0;
-export function selectField(label, name, choices, selected = '') {
-    const id = 'field-select-' + ++selectCounter;
-    const select = el('select', { name, hidden: true }, choices.map(([value, caption]) =>
-        el('option', { value, selected: String(value) === String(selected) }, caption)));
-    const caption = el('span', { id: id + '-label' }, label);
-    const value = el('span', { id: id + '-value' });
-    const menu = el('div', { class: 'select-menu', id, popover: 'auto', role: 'listbox', 'aria-labelledby': caption.id });
-    const trigger = button(value, open, 'select-trigger', {
-        'aria-haspopup': 'listbox', 'aria-controls': id, 'aria-expanded': 'false',
-        'aria-labelledby': caption.id + ' ' + value.id, disabled: !choices.length,
-    });
-    const options = choices.map(([key, text]) => button(text, () => {
-        select.value = key;
-        menu.hidePopover();
-        trigger.focus();
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-    }, 'select-option', { tabindex: -1, role: 'option' }));
-    function sync() {
-        value.textContent = select.selectedOptions[0]?.textContent ?? 'Нет вариантов';
-        options.forEach((option, index) => option.setAttribute('aria-selected', String(index === select.selectedIndex)));
-    }
-    function open() {
-        if (menu.matches(':popover-open')) { menu.hidePopover(); return; }
-        const box = trigger.getBoundingClientRect();
-        const below = innerHeight - box.bottom;
-        const above = box.top;
-        menu.style.left = box.left + 'px';
-        menu.style.width = box.width + 'px';
-        menu.style.maxHeight = Math.max(48, Math.min(260, Math.max(above, below) - 12)) + 'px';
-        menu.style.top = below >= above ? box.bottom + 4 + 'px' : 'auto';
-        menu.style.bottom = below < above ? innerHeight - box.top + 4 + 'px' : 'auto';
-        menu.showPopover();
-        (options[select.selectedIndex] ?? options[0])?.focus();
-    }
-    trigger.addEventListener('keydown', event => {
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); open(); }
-    });
-    menu.addEventListener('toggle', () => trigger.setAttribute('aria-expanded', String(menu.matches(':popover-open'))));
-    menu.addEventListener('keydown', event => {
-        if (event.key === 'Escape') { event.preventDefault(); menu.hidePopover(); trigger.focus(); return; }
-        if (event.key === 'Tab') { menu.hidePopover(); trigger.focus(); return; }
-        const index = options.indexOf(document.activeElement);
-        const next = { Home: 0, End: options.length - 1, ArrowDown: index + 1, ArrowUp: index - 1 }[event.key];
-        if (next === undefined) return;
-        event.preventDefault();
-        options[Math.max(0, Math.min(options.length - 1, next))]?.focus();
-    });
-    select.addEventListener('change', sync);
-
-    menu.append(...options);
-    sync();
-    return el('div', { class: 'field' }, caption, select, trigger, menu);
+    return el('label', { class: 'field kit-field' }, label, el('span', { class: 'search-control kit-input-wrap' },
+        el('span', { class: 'search-icon kit-field-icon', 'aria-hidden': 'true' }, '⌕'), input, clear));
 }
 
 export function toggle(label, name, checked, disabled = false) {
@@ -111,7 +52,8 @@ export function table(headers, rows, empty = 'Нет записей') {
     if (!rows.length) return el('p', { class: 'panel empty' }, empty);
     return el('div', { class: 'table-frame', tabindex: '0', role: 'region', 'aria-label': 'Таблица' },
         el('table', {}, el('thead', {}, el('tr', {}, headers.map(header => el('th', { scope: 'col' }, header)))),
-            el('tbody', {}, rows.map(row => el('tr', {}, row.map(cell => el('td', {}, cell)))))));
+            el('tbody', {}, rows.map(row => el('tr', {}, row.map(cell =>
+                el('td', { class: typeof cell === 'number' ? 'kit-number' : null }, cell)))))));
 }
 
 export function notice(message = '', isError = false) {
@@ -263,7 +205,7 @@ export function toast(message, error = false) {
     root.replaceChildren(el('p', { class: 'toast' + (error ? ' error' : '') }, message));
     window.dispatchEvent(new CustomEvent('admin:activity', { detail: { kind: error ? 'error' : 'success' } }));
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => root.replaceChildren(), 4600);
+    toastTimer = setTimeout(() => root.replaceChildren(), 4800);
 }
 
 export function clipboardButton(label, value) {

@@ -1,17 +1,9 @@
 import { bindForm, button, confirmAction, el, formError, heading, nominationStatuses,
     numbers, readPanelData, request, selectField, showDialog, status, submit, table, textField, toast, toggle } from './ui.js';
-
-function safeImage(value) {
-    if (!value) return null;
-    if (/^\/api\/media\/[a-f0-9]{64}$/.test(value)) return value;
-    if (/^\/(?:assets|images)\//.test(value) && !value.includes('\\')) return value;
-    try {
-        const address = new URL(value);
-        return address.protocol === 'https:' && !address.username && !address.password ? address.href : null;
-    } catch {
-        return null;
-    }
-}
+import { readCatalogImport } from './catalog-preview.js';
+import { readPanelUrl, updatePanelUrl } from './panel-url.js';
+import { nomineeArt, nomineeDetails, safeImage } from './nominee-media.js';
+import { tilt } from './motion.js';
 
 function cover(item, small = false) {
     const src = safeImage(item.image_url);
@@ -163,30 +155,67 @@ function availability(row) {
     return status(nominationStatuses[row.status], row.status === 'open' ? 'ok' : '');
 }
 
+function catalogId(value) {
+    const id = Number(value);
+    return Number.isInteger(id) && id > 0 && id <= 2147483647 ? id : undefined;
+}
+
 export async function loadCatalog(_operator, signal, { nominationId, nomineeId } = {}) {
+    const { params } = readPanelUrl();
     const root = el('section');
     const list = el('div', { class: 'catalog-index' });
     const detail = el('section', { class: 'catalog-detail panel' });
     const catalogNotice = formError();
     let rows = [];
-    let selected = Number(nominationId) || undefined;
-    let focusedNominee = Number(nomineeId) || undefined;
+    let selected = catalogId(nominationId ?? params.get('nomination'));
+    let focusedNominee = catalogId(nomineeId ?? params.get('nominee'));
+    let cardView = params.get('view') === 'cards';
+    let cardsScope;
+    signal.addEventListener('abort', () => cardsScope?.abort(), { once: true });
     let voteCounts = new Map();
-    let showArchived = false;
+    let showArchived = params.get('archived') === '1';
     const selectedNominations = new Set();
     const selectedNominees = new Set();
     const bulkButton = button('Групповое изменение', bulkEdit, 'subtle', { disabled: true });
     const search = textField('Поиск по номинациям и номинантам', 'catalog-search', '', { type: 'search', autocomplete: 'off' });
     search.querySelector('input').addEventListener('input', draw);
-    const archive = toggle('Показать архив', 'catalog-archive', false);
-    archive.querySelector('input').addEventListener('change', event => { showArchived = event.target.checked; draw(); });
+    const archive = toggle('Показать архив', 'catalog-archive', showArchived);
+    const archiveInput = archive.querySelector('input');
+    archiveInput.addEventListener('change', () => {
+        showArchived = archiveInput.checked;
+        rememberSelection('push');
+    });
 
-    async function readRows() {
+    async function readRows(initial = false) {
         const [catalog, stats] = await Promise.all([readPanelData('/admin/catalog'), readPanelData('/admin/stats')]);
         if (signal.aborted) return;
         rows = catalog;
         voteCounts = new Map(stats.nomination_votes.map(row => [row.id, row.vote_count]));
-        draw();
+        if (initial && (selected || focusedNominee)) {
+            const target = rows.find(row => row.id === selected)
+                ?? rows.find(row => row.nominees.some(nominee => nominee.id === focusedNominee));
+            selected = target?.id;
+            if (target?.archived || target?.nominees.some(nominee => nominee.id === focusedNominee && nominee.archived)) {
+                showArchived = true;
+                archiveInput.checked = true;
+            }
+        }
+        rememberSelection('replace');
+    }
+
+    function rememberSelection(history) {
+        const active = draw();
+        selected = active?.id;
+        if (!active?.nominees.some(nominee => nominee.id === focusedNominee && (showArchived || !nominee.archived))) {
+            focusedNominee = undefined;
+        }
+        if (!signal.aborted && readPanelUrl().id === 'catalog') {
+            updatePanelUrl({
+                nomination: selected ?? null,
+                nominee: focusedNominee ?? null,
+                archived: showArchived ? '1' : null,
+            }, { history });
+        }
     }
 
     function selectionState() {
@@ -206,15 +235,20 @@ export async function loadCatalog(_operator, signal, { nominationId, nomineeId }
     }
 
     function draw() {
+        cardsScope?.abort();
+        cardsScope = new AbortController();
         const query = search.querySelector('input').value.trim().toLocaleLowerCase('ru-RU');
         const matches = value => value?.toLocaleLowerCase('ru-RU').includes(query);
         const filtered = rows.filter(row => (showArchived || !row.archived) &&
             (!query || matches(row.title) || row.nominees.some(nominee => (showArchived || !nominee.archived) && matches(nominee.name))));
         const active = filtered.find(row => row.id === selected) ?? filtered[0];
-        selected = active?.id;
         list.replaceChildren(...filtered.map(row => el('button', {
-            type: 'button', class: 'catalog-choice', 'aria-current': row.id === selected ? 'true' : null,
-            onClick: () => { selected = row.id; focusedNominee = undefined; draw(); },
+            type: 'button', class: 'catalog-choice', 'aria-current': row.id === active?.id ? 'true' : null,
+            onClick: () => {
+                selected = row.id;
+                focusedNominee = undefined;
+                rememberSelection('push');
+            },
         }, el('span', {}, row.title), availability(row))));
         if (!filtered.length) list.append(el('p', { class: 'empty' }, 'Номинации не найдены.'));
         if (!active) {
@@ -238,7 +272,18 @@ export async function loadCatalog(_operator, signal, { nominationId, nomineeId }
                 button('Редактировать номинацию', () => edit(active, false), 'subtle'),
                 button('Удалить номинацию', () => remove(active, false), 'danger'),
                 button('Добавить номинанта', () => edit(null, true, active.id), 'primary')),
-            table(['Выбор', 'Номинант', 'Порядок', 'Статус', 'Действия'], nominees.map(nominee => [
+            el('div', { class: 'toolbar nominee-view' },
+                ...[[false, 'Таблица'], [true, 'Карточки']].map(([showCards, caption]) =>
+                    button(caption, () => {
+                        if (cardView === showCards) return;
+                        cardView = showCards;
+                        updatePanelUrl({ view: cardView ? 'cards' : null });
+                        draw();
+                        detail.querySelector('.nominee-view [aria-pressed="true"]')?.focus();
+                    }, 'subtle compact', { 'aria-pressed': String(cardView === showCards) }))),
+            cardView && nominees.length ? el('div', { class: 'nominee-gallery' },
+                nominees.map(nominee => catalogueCard(nominee, active, cardsScope.signal)))
+                : table(['Выбор', 'Номинант', 'Порядок', 'Статус', 'Действия'], nominees.map(nominee => [
                 selectRow('nominee', nominee.id, nominee.name),
                 el('span', { class: 'with-cover' }, cover(nominee, true), el('span', { class: 'stacked-text' },
                     el('strong', {}, nominee.name), nominee.handle ? el('small', {}, nominee.handle) : null,
@@ -248,6 +293,22 @@ export async function loadCatalog(_operator, signal, { nominationId, nomineeId }
                     { 'aria-label': 'Изменить · ' + nominee.name }),
                     button('Удалить', () => remove(nominee, true), 'danger compact', { 'aria-label': 'Удалить · ' + nominee.name })),
             ]), 'В этой номинации нет подходящих номинантов.'));
+        return active;
+    }
+
+    function catalogueCard(nominee, nomination, cardSignal) {
+        const art = nomineeArt(nominee, 'nominee-tile__art');
+        const glare = el('span', { class: 'podium-glare', 'aria-hidden': 'true' });
+        const article = el('article', { class: 'nominee-tile' });
+        const layer = el('div', { class: 'nominee-tile__layer' }, glare, art,
+            el('div', { class: 'nominee-tile__caption' },
+                el('h3', {}, nominee.name), nominee.handle && el('small', { class: 'mono' }, nominee.handle),
+                button('Открыть карточку', () => nomineeDetails(nominee,
+                    button('Редактировать', () => edit(nominee, true, nomination.id), 'primary')), 'subtle compact',
+                { 'aria-label': 'Открыть карточку · ' + nominee.name })));
+        article.append(layer);
+        tilt(article, layer, { glare, parallax: art.querySelector('img'), signal: cardSignal });
+        return article;
     }
 
     function preview(nomination) {
@@ -299,27 +360,84 @@ export async function loadCatalog(_operator, signal, { nominationId, nomineeId }
     }
 
     function importCatalogue() {
+        const fileField = textField('Каталог JSON', 'file', '', { type: 'file', accept: 'application/json,.json', required: true });
+        const confirmation = toggle('Подтверждаю импорт', 'confirmed', false, true);
+        const fileInput = fileField.querySelector('input');
+        const confirmInput = confirmation.querySelector('input');
+        const importButton = submit('Импортировать');
+        const previewStatus = el('p', { class: 'muted', role: 'status' }, 'Выберите JSON, чтобы увидеть ожидаемые изменения.');
+        const previewDetails = el('div');
+        const error = formError();
         const form = el('form', { class: 'form-stack' },
             el('p', { class: 'muted' }, 'Добавляются новые записи. Совпадения по названию или имени сохраняются, новые номинации создаются черновиками.'),
-            textField('Каталог JSON', 'file', '', { type: 'file', accept: 'application/json,.json', required: true }),
-            toggle('Подтверждаю импорт', 'confirmed', false),
-            formError(), el('div', { class: 'dialog-actions' }, submit('Импортировать')));
-        bindForm(form, async fields => {
-            if (!fields.has('confirmed')) throw new Error('Подтвердите импорт каталога.');
-            const file = fields.get('file');
-            if (!file?.size || file.size > 512 * 1024) throw new Error('Выберите JSON-файл до 512 КБ.');
-            let catalogue;
+            fileField, previewStatus, previewDetails, confirmation, error,
+            el('div', { class: 'dialog-actions' }, importButton));
+        let selection = 0;
+        let prepared;
+
+        function refreshControls() {
+            confirmInput.disabled = !prepared;
+            importButton.disabled = !prepared || !confirmInput.checked;
+        }
+
+        async function previewFile() {
+            const version = ++selection;
+            const file = fileInput.files?.[0];
+            prepared = undefined;
+            confirmInput.checked = false;
+            refreshControls();
+            error.textContent = '';
+            previewDetails.replaceChildren();
+            if (!file) {
+                previewStatus.textContent = 'Выберите JSON, чтобы увидеть ожидаемые изменения.';
+                return;
+            }
+            previewStatus.textContent = 'Проверяем файл и сравниваем с каталогом…';
             try {
-                catalogue = JSON.parse((await file.text()).replace(/^\uFEFF/, ''));
-            } catch {
-                throw new Error('Файл содержит некорректный JSON.');
+                const parsed = await readCatalogImport(file, rows);
+                if (version !== selection || signal.aborted || !form.closest('dialog')?.open) return;
+                prepared = { ...parsed, file };
+                const { summary } = parsed;
+                const newNominations = summary.filter(row => row.create).length;
+                const newNominees = summary.reduce((total, row) => total + row.added, 0);
+                const skipped = summary.reduce((total, row) => total + row.skipped, 0);
+                previewStatus.textContent = 'Новых номинаций — ' + numbers.format(newNominations)
+                    + ', новых номинантов — ' + numbers.format(newNominees)
+                    + ', совпадений по имени — ' + numbers.format(skipped) + '.';
+                previewDetails.append(el('details', {},
+                    el('summary', {}, 'Что изменится по номинациям'),
+                    table(['Номинация', 'Действие', 'Новые номинанты', 'Совпадения'], summary.map(row => [
+                        row.title, row.create ? 'Создать черновик' : 'Сохранить существующую',
+                        numbers.format(row.added), numbers.format(row.skipped),
+                    ]))),
+                el('p', { class: 'muted' }, 'Расчёт сделан по загруженному каталогу. Сервер проверит файл и актуальное состояние при импорте.'));
+            } catch (cause) {
+                if (version !== selection || signal.aborted || !form.closest('dialog')?.open) return;
+                previewStatus.textContent = 'Предпросмотр недоступен.';
+                error.textContent = cause.message;
             }
-            if (catalogue?.schema !== 1 || !Array.isArray(catalogue.nominations)) {
-                throw new Error('Используйте экспорт каталога с версией схемы 1.');
+            refreshControls();
+        }
+
+        fileInput.addEventListener('change', previewFile);
+        confirmInput.addEventListener('change', refreshControls);
+        refreshControls();
+        bindForm(form, async fields => {
+            if (!prepared || prepared.file !== fileInput.files?.[0]) {
+                throw new Error('Проверьте файл в предпросмотре.');
             }
-            const result = await request('/admin/catalog/import', { method: 'POST', signal, data: {
-                confirmed: true, schema: 1, nominations: catalogue.nominations,
-            } });
+            if (!fields.has('confirmed')) throw new Error('Подтвердите импорт каталога.');
+            fileInput.disabled = true;
+            confirmInput.disabled = true;
+            let result;
+            try {
+                result = await request('/admin/catalog/import', { method: 'POST', signal, data: {
+                    confirmed: true, schema: 1, nominations: prepared.nominations,
+                } });
+            } finally {
+                fileInput.disabled = false;
+                confirmInput.disabled = false;
+            }
             if (form.isConnected) document.getElementById('dialog').close();
             await readRows();
             toast('Добавлено номинаций: ' + result.added_nominations + '. Добавлено номинантов: ' + result.added_nominees + '.');
@@ -400,20 +518,11 @@ export async function loadCatalog(_operator, signal, { nominationId, nomineeId }
         button('Создать номинацию', () => edit(null, false), 'primary')),
     catalogNotice, el('div', { class: 'filters' }, search, archive),
     el('div', { class: 'catalog' }, el('section', { class: 'panel' }, el('div', { class: 'panel-head' }, el('h2', {}, 'Номинации')), list), detail));
-    await readRows();
-    if (nominationId || focusedNominee) {
-        const target = rows.find(row => row.id === Number(nominationId)
-            || row.nominees.some(nominee => nominee.id === focusedNominee));
-        if (target) {
-            selected = target.id;
-            if (target.archived || target.nominees.some(nominee => nominee.id === focusedNominee && nominee.archived)) {
-                showArchived = true;
-                archive.querySelector('input').checked = true;
-            }
-            draw();
-            if (focusedNominee) requestAnimationFrame(() =>
-                root.querySelector('[data-catalog-focus]')?.scrollIntoView({ block: 'nearest' }));
-        }
+    await readRows(true);
+    if (focusedNominee) {
+        requestAnimationFrame(() => {
+            if (!signal.aborted) root.querySelector('[data-catalog-focus]')?.scrollIntoView({ block: 'nearest' });
+        });
     }
     return root;
 }

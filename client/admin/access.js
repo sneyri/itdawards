@@ -3,6 +3,7 @@ import {
     heading, notice, numbers, request, roles, selectField, showDialog, status, submit, table, textField, toast, toggle,
 } from './ui.js';
 import { showUserSessions } from './management.js';
+import { readPanelUrl, updatePanelUrl } from './panel-url.js';
 
 const participantRoles = Object.entries(roles).filter(([role]) => role === 'USER' || role === 'JURY');
 const accountSort = [
@@ -21,6 +22,16 @@ const actionLabels = {
     'nominee.created': 'Добавление номинанта', 'nominee.updated': 'Изменение номинанта',
     'nominee.deleted': 'Удаление номинанта', 'settings.updated': 'Настройки голосования',
 };
+
+function optionParam(params, name, choices, fallback = '') {
+    const value = params.get(name);
+    return choices.some(([key]) => key === value) ? value : fallback;
+}
+
+function pageParam(params, maximum) {
+    const value = params.get('page');
+    return /^[1-9]\d{0,7}$/.test(value ?? '') && Number(value) <= maximum ? Number(value) : 1;
+}
 
 function taggedRole(role) {
     return el('span', { class: 'tag' }, roles[role] || role);
@@ -115,11 +126,13 @@ function userProfile(viewer, record, onSave, signal, reopen) {
 export async function loadUsers(viewer, signal, { query: initialQuery = '' } = {}) {
     const pageSize = 50;
     const visibleRoles = viewer.role === 'SUPERADMIN' ? Object.entries(roles) : participantRoles;
+    const statusChoices = [['', 'Все статусы'], ['false', 'Активен'], ['true', 'Заблокирован']];
+    const { params } = readPanelUrl();
     const search = el('form', { class: 'filters' },
         textField('Поиск', 'q', initialQuery, { type: 'search', maxlength: 120, placeholder: 'Имя, логин, ID или Telegram ID' }),
-        selectField('Роль', 'role', [['', 'Все роли'], ...visibleRoles]),
-        selectField('Статус', 'blocked', [['', 'Все статусы'], ['false', 'Активен'], ['true', 'Заблокирован']]),
-        selectField('Сортировка', 'sort', accountSort, 'created_desc'), submit('Найти'));
+        selectField('Роль', 'role', [['', 'Все роли'], ...visibleRoles], optionParam(params, 'role', visibleRoles)),
+        selectField('Статус', 'blocked', statusChoices, optionParam(params, 'blocked', statusChoices)),
+        selectField('Сортировка', 'sort', accountSort, optionParam(params, 'sort', accountSort, 'created_desc')), submit('Найти'));
     const message = notice('', true);
     const list = el('div');
     const root = el('section', {}, heading('Пользователи', 'Аккаунты участников, роли и участие в голосовании.'), search, message, list);
@@ -132,7 +145,15 @@ export async function loadUsers(viewer, signal, { query: initialQuery = '' } = {
             await request('/admin/users/' + user.id, { signal }), refresh, signal, () => openProfile(user)));
     }
 
-    async function refresh(page = currentPage) {
+    async function refresh(page = currentPage, persist = true) {
+        if (signal.aborted) return;
+        if (persist) updatePanelUrl({
+            role: filters.get('role'),
+            blocked: filters.get('blocked'),
+            sort: filters.get('sort') === 'created_desc' ? null : filters.get('sort'),
+            // Pages of a private search do not describe the shareable result set.
+            page: !filters.has('q') && page > 1 ? page : null,
+        });
         const requestId = ++requestedPage;
         const query = new URLSearchParams(filters);
         query.set('offset', String((page - 1) * pageSize));
@@ -158,17 +179,17 @@ export async function loadUsers(viewer, signal, { query: initialQuery = '' } = {
         }
     }
 
-    function applyFilters() {
+    function applyFilters(page = 1, persist = true) {
         filters = new URLSearchParams();
         for (const [key, value] of new FormData(search)) {
             if (value.trim()) filters.set(key, value.trim());
         }
-        return refresh(1);
+        return refresh(page, persist);
     }
 
     search.addEventListener('submit', event => { event.preventDefault(); void applyFilters(); });
     search.addEventListener('change', event => { if (event.target.tagName === 'SELECT') void applyFilters(); });
-    await applyFilters();
+    await applyFilters(initialQuery ? 1 : pageParam(params, 2_000_000), false);
     return root;
 }
 
@@ -181,7 +202,8 @@ function showIssuedInvitation(invitation, title = 'Приглашение соз
     showDialog(title, el('div', { class: 'form-stack' },
         notice('Передайте код участнику лично. Его можно использовать один раз на странице входа.'),
         el('code', { class: 'secret invitation-code' }, invitation.code),
-        definition([['Роль', roles[invitation.role]], ['Действует до', invitation.expires_at ? date(invitation.expires_at) : 'Бессрочно']]),
+        definition([['Роль', roles[invitation.role]], ['Действует до', invitation.expires_at ? date(invitation.expires_at) : 'Бессрочно'],
+            ['Telegram', 'Статус доставки неизвестен']]),
         el('div', { class: 'toolbar' }, clipboardButton('Скопировать код', invitation.code),
             clipboardButton('Скопировать ссылку на вход', signIn),
             el('a', { class: 'text-link', href: signIn, target: '_blank', rel: 'noopener noreferrer' }, 'Открыть страницу входа'))));
@@ -190,6 +212,7 @@ function showIssuedInvitation(invitation, title = 'Приглашение соз
 function showIssuedBatch(invitations) {
     showDialog('Коды созданы', el('div', { class: 'form-stack' },
         notice('Передайте каждому участнику его одноразовый код и ссылку на вход.'),
+        el('p', { class: 'muted' }, 'Telegram: статус доставки неизвестен.'),
         el('ol', { class: 'admin-invite-codes' }, invitations.map(invitation => el('li', {},
             el('code', { class: 'secret invitation-code' }, invitation.code),
             el('div', { class: 'toolbar' }, clipboardButton('Скопировать код', invitation.code))))),
@@ -251,8 +274,10 @@ export async function loadInvitations(viewer, signal, { create = false } = {}) {
     const pageSize = 100;
     const list = el('div');
     const message = notice('', true);
-    const roleFilter = selectField('Роль', 'role', [['', 'Все роли'], ...participantRoles]);
-    const statusFilter = selectField('Статус', 'status', [['', 'Все статусы'], ...Object.entries(invitationStatus).map(([key, value]) => [key, value[0]])]);
+    const { params } = readPanelUrl();
+    const statusChoices = Object.entries(invitationStatus).map(([key, value]) => [key, value[0]]);
+    const roleFilter = selectField('Роль', 'role', [['', 'Все роли'], ...participantRoles], optionParam(params, 'role', participantRoles));
+    const statusFilter = selectField('Статус', 'status', [['', 'Все статусы'], ...statusChoices], optionParam(params, 'status', statusChoices));
     const filters = el('div', { class: 'filters' }, roleFilter, statusFilter);
     const root = el('section', {}, heading('Приглашения', 'Доступ участникам и жюри по коду.',
         button('Создать пакет', () => createBatch(refresh, signal), 'subtle'),
@@ -279,12 +304,16 @@ export async function loadInvitations(viewer, signal, { create = false } = {}) {
             });
     }
 
-    async function refresh(page = currentPage) {
+    async function refresh(page = currentPage, persist = true) {
+        if (signal.aborted) return;
+        const role = roleFilter.querySelector('select').value;
+        const invitationState = statusFilter.querySelector('select').value;
+        if (persist) updatePanelUrl({ role, status: invitationState, page: page > 1 ? page : null });
         const requestId = ++requestedPage;
         list.setAttribute('aria-busy', 'true');
         message.textContent = '';
         try {
-            const query = new URLSearchParams({ page: String(page), role: roleFilter.querySelector('select').value, status: statusFilter.querySelector('select').value });
+            const query = new URLSearchParams({ page: String(page), role, status: invitationState });
             const invitations = await request('/admin/invitations?' + query, { signal });
             if (signal.aborted || requestedPage !== requestId) return;
             currentPage = page;
@@ -303,7 +332,7 @@ export async function loadInvitations(viewer, signal, { create = false } = {}) {
         }
     }
 
-    await refresh();
+    await refresh(pageParam(params, 10_000), false);
     if (create && !signal.aborted) createInvitation(refresh, signal);
     return root;
 }

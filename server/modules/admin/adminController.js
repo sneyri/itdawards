@@ -43,8 +43,16 @@ export async function getStats(req, res) {
                 SELECT count(*)::int AS users,
                     count(*) FILTER (WHERE last_login_at IS NOT NULL)::int AS registered,
                     count(*) FILTER (WHERE role IN ('MANAGER', 'SUPERADMIN'))::int AS administrators,
-                    count(*) FILTER (WHERE role = 'JURY')::int AS jurors
-                FROM users
+                    count(*) FILTER (WHERE role = 'JURY')::int AS jurors,
+                    count(*) FILTER (WHERE eligible)::int AS eligible_voters,
+                    count(*) FILTER (WHERE eligible AND (
+                        EXISTS (SELECT 1 FROM votes v WHERE v.user_id = accounts.id AND v.voter_role IS NOT NULL)
+                        OR EXISTS (SELECT 1 FROM jury_votes j WHERE j.jury_id = accounts.id)
+                    ))::int AS eligible_voters_participated
+                FROM (
+                    SELECT id, role, last_login_at, role IN ('USER', 'JURY') AND NOT blocked AS eligible
+                    FROM users
+                ) accounts
             ), ballots AS (
                 SELECT count(DISTINCT v.user_id)::int AS voters, ${voteTotals}
                 FROM votes v WHERE v.voter_role IS NOT NULL

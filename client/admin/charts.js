@@ -1,6 +1,5 @@
 import { el, numbers } from './ui.js';
-
-const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+import { motionAllowed } from './motion.js';
 
 function surface(canvas) {
     const ctx = canvas.getContext('2d');
@@ -55,7 +54,7 @@ export function activityChart(trends, signal) {
         const scaleMax = Math.max(4, Math.ceil(max / 4) * 4);
         const point = (index, value) => [left + span * index / Math.max(1, trends.length - 1),
             bottom - (bottom - top) * value * fraction / scaleMax];
-        ctx.font = '11px system-ui';
+        ctx.font = '11px "IBM Plex Mono", monospace';
         for (let i = 0; i <= 4; i++) {
             const y = bottom - (bottom - top) * i / 4;
             ctx.strokeStyle = 'rgba(' + ink + ',.22)';
@@ -67,6 +66,11 @@ export function activityChart(trends, signal) {
             ctx.fillText(numbers.format(scaleMax * i / 4), 1, y + 3);
         }
         const points = trends.map((entry, index) => point(index, entry[series]));
+        const barWidth = Math.max(2, Math.min(12, span / Math.max(1, trends.length) * .48));
+        points.forEach(([x, y], index) => {
+            ctx.fillStyle = index === selected ? 'rgba(121,207,200,.48)' : 'rgba(' + ink + ',.20)';
+            ctx.fillRect(x - barWidth / 2, y, barWidth, bottom - y);
+        });
         ctx.beginPath();
         points.forEach(([x, y], index) => index === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
         ctx.lineTo(points.at(-1)[0], bottom);
@@ -84,8 +88,16 @@ export function activityChart(trends, signal) {
         ctx.stroke();
         const [x, y] = points[selected];
         ctx.beginPath();
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, bottom);
+        ctx.strokeStyle = 'rgba(150,214,209,.46)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
         ctx.arc(x, y, 3.25, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(' + ink + ',1)';
+        ctx.fillStyle = '#b3e0db';
         ctx.fill();
         ctx.fillStyle = muted;
         ctx.fillText(day(trends[0].day), left, height - 7);
@@ -99,8 +111,7 @@ export function activityChart(trends, signal) {
         const started = performance.now();
         function step(now) {
             if (signal?.aborted || !canvas.isConnected) return;
-            const still = reducedMotion.matches || document.hidden || document.body.classList.contains('effects-off');
-            const fraction = still ? 1 : Math.min(1, (now - started) / 420);
+            const fraction = motionAllowed() ? Math.min(1, (now - started) / 420) : 1;
             draw(1 - (1 - fraction) ** 3);
             if (fraction < 1) animation = requestAnimationFrame(step);
         }
@@ -127,7 +138,7 @@ export function activityChart(trends, signal) {
         const offset = event.clientX - canvas.getBoundingClientRect().left;
         choose(Math.round((offset - 31) / (chartSize - 40) * (trends.length - 1)));
     });
-    const layout = el('div', {}, el('div', { class: 'toolbar' }, tabs),
+    const layout = el('div', {}, el('div', { class: 'toolbar chart-tabs' }, tabs),
         el('div', { class: 'chart-wrap' }, canvas),
         el('div', { class: 'toolbar' }, previous, next, details));
     const resize = new ResizeObserver(() => {

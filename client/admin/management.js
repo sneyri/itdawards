@@ -1,5 +1,6 @@
-import { button, confirmAction, date, definition, el, formError, heading, notice, numbers, request,
+import { button, confirmAction, date, dateInput, definition, el, formError, heading, notice, numbers, request,
     roles, selectField, showDialog, status, submit, table, textField, toast } from './ui.js';
+import { readPanelUrl, updatePanelUrl } from './panel-url.js';
 
 const methods = { telegram: 'Telegram', password: 'Пароль', recovery: 'Восстановление',
     invitation: 'Приглашение', unknown: 'Не записан', legacy: 'Существующая сессия' };
@@ -56,14 +57,42 @@ function columnLabel(name) {
     return columnNames[name] ?? name;
 }
 
+function columnClass(column) {
+    if (column.name === 'id' || column.name.endsWith('_id')) return 'admin-db-id';
+    if (/date|time/i.test(column.type ?? '')) return 'admin-db-date';
+    if (/^(text|varchar|character varying|jsonb?)$/i.test(column.type ?? '')) return 'admin-db-text';
+    return null;
+}
+
 function cellValue(value, column) {
     if (value == null) return '—';
+    if (columnClass(column) === 'admin-db-id') return code(value);
     if (typeof value === 'boolean') return value ? 'Да' : 'Нет';
     if (typeof value === 'number') return count(value);
     if (column.name === 'role') return formattedRole(value);
     if (typeof value === 'string' && /date|time/i.test(column.type ?? '') && /^\d{4}-\d{2}-\d{2}/.test(value)) return timestamp(value);
-    if (column.name === 'id' || column.name.endsWith('_id')) return code(value);
     return typeof value === 'object' ? JSON.stringify(value) : String(value);
+}
+
+function databaseTable(columns, rows) {
+    const frame = table(columns.map(column => columnLabel(column.name)),
+        rows.map(row => columns.map(column => cellValue(row[column.name], column))), 'Строки не найдены.');
+    const classes = columns.map(columnClass);
+    for (const row of frame.querySelectorAll('tr')) {
+        classes.forEach((className, index) => { if (className) row.cells[index]?.classList.add(className); });
+    }
+    return frame;
+}
+
+function offsetParam(params, size) {
+    const page = params.get('page');
+    if (!/^[1-9]\d{0,7}$/.test(page ?? '')) return 0;
+    const offset = (Number(page) - 1) * size;
+    return offset <= 99_999_999 ? offset : 0;
+}
+
+function offsetPage(offset, size) {
+    return offset > 0 ? Math.floor(offset / size) + 1 : null;
 }
 
 function paging(offset, size, total, changePage) {
@@ -90,14 +119,30 @@ function afterAction(action) {
 
 export async function loadDatabase(_viewer, signal) {
     const tables = await request('/admin/nexus/tables', { signal });
+    const { params } = readPanelUrl();
+    const pageSize = 30;
     const content = el('section', { class: 'admin-tool-stack' });
     const quickLinks = el('nav', { class: 'admin-db-tables', 'aria-label': 'Наборы данных' });
     const details = el('div', { class: 'admin-tool-stack' });
     const offline = formError();
     let queryAbort;
-    let selected = tables[0];
-    let filters = { search: '', sort: '', direction: 'asc', offset: 0, limit: 30 };
+    let selected = tables.find(entry => entry.id === params.get('table')) ?? tables[0];
+    const initialSort = params.get('sort');
+    const defaultFilters = () => ({ search: '', sort: '', direction: 'asc', offset: 0, limit: pageSize });
+    let filters = { ...defaultFilters(), offset: offsetParam(params, pageSize),
+        sort: selected?.columns?.some(column => column.name === initialSort) ? initialSort : '',
+        direction: params.get('direction') === 'desc' ? 'desc' : 'asc' };
     signal.addEventListener('abort', () => queryAbort?.abort(), { once: true });
+
+    function saveUrl() {
+        updatePanelUrl({
+            table: selected.id,
+            sort: filters.sort,
+            direction: filters.direction === 'desc' ? 'desc' : null,
+            // The URL describes the table without private search and filter values.
+            page: filters.search || filters.value ? null : offsetPage(filters.offset, pageSize),
+        });
+    }
 
     function tablePath() {
         return '/admin/nexus/tables/' + encodeURIComponent(selected.id);
@@ -109,7 +154,8 @@ export async function loadDatabase(_viewer, signal) {
                 code(count(entry.count))),
             () => {
                 selected = entry;
-                filters = { search: '', sort: '', direction: 'asc', offset: 0, limit: 30 };
+                filters = defaultFilters();
+                saveUrl();
                 drawTables();
                 loadRows();
             }, 'subtle', { 'aria-current': selected.id === entry.id ? 'true' : null })));
@@ -141,6 +187,7 @@ export async function loadDatabase(_viewer, signal) {
             }
             filters = { ...filters, search: data.get('search').trim(), sort: data.get('sort'), direction: data.get('direction'),
                 column, value: column ? value : '', offset: 0 };
+            saveUrl();
             loadRows();
         });
         const exportPath = '/api' + pathWithQuery(tablePath(), { search: filters.search, sort: filters.sort,
@@ -154,9 +201,12 @@ export async function loadDatabase(_viewer, signal) {
         details.replaceChildren(el('header', { class: 'admin-db-header' },
             el('div', {}, el('h2', {}, current.label || current.id), el('p', { class: 'admin-tool-meta' }, current.id)),
             el('div', { class: 'toolbar' }, editor, el('a', { class: 'button subtle', href: exportPath }, 'CSV выборки'))),
-        schema, form, table(columns.map(column => columnLabel(column.name)), rowData.map(row =>
-            columns.map(column => cellValue(row[column.name], column))), 'Строки не найдены.'),
-        paging(result.offset, result.limit, result.total, offset => { filters = { ...filters, offset }; loadRows(); }));
+        schema, form, databaseTable(columns, rowData),
+        paging(result.offset, result.limit, result.total, offset => {
+            filters = { ...filters, offset };
+            saveUrl();
+            loadRows();
+        }));
     }
 
     async function loadRows() {
@@ -256,8 +306,22 @@ function toIso(value) {
     return value ? new Date(value).toISOString() : '';
 }
 
+function isoParam(params, key) {
+    const value = params.get(key);
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value ?? '') || value.startsWith('0000')) return '';
+    const parsed = new Date(value);
+    return Number.isFinite(+parsed) && parsed.toISOString() === value ? value : '';
+}
+
+function cursorParam(params) {
+    const value = params.get('before');
+    return /^[1-9]\d{0,18}$/.test(value ?? '') && BigInt(value) <= 9223372036854775807n ? value : undefined;
+}
+
 export async function loadSecurity(_viewer, signal) {
     let report = await request('/admin/nexus/security', { signal });
+    const { params } = readPanelUrl();
+    const sessionPageSize = 30;
     const box = el('div', { class: 'admin-tool-stack' });
     const message = formError();
     const controls = el('div', { class: 'toolbar admin-security-tabs', 'aria-label': 'Инструменты безопасности' });
@@ -272,19 +336,23 @@ export async function loadSecurity(_viewer, signal) {
     }
     signal.addEventListener('abort', stop, { once: true });
 
-    function open(next) {
+    function open(next, restoredParams) {
         if (signal.aborted) return;
         stop();
         box.removeAttribute('aria-busy');
         section = next;
+        if (!restoredParams) {
+            updatePanelUrl({ section: next === 'overview' ? null : next, page: null, before: null,
+                from: null, to: null, level: null });
+        }
         message.textContent = '';
         loadAbort = new AbortController();
         controls.replaceChildren(...Object.entries(titles).map(([name, label]) =>
             button(label, () => open(name), 'subtle', { 'aria-pressed': String(section === name) })));
         if (next === 'overview') showOverview(loadAbort.signal);
-        else if (next === 'sessions') showSessions(loadAbort.signal);
-        else if (next === 'audit') showLog(loadAbort.signal, false);
-        else showLog(loadAbort.signal, true);
+        else if (next === 'sessions') showSessions(loadAbort.signal,
+            restoredParams ? offsetParam(restoredParams, sessionPageSize) : 0);
+        else showLog(loadAbort.signal, next === 'errors', restoredParams ?? new URLSearchParams());
     }
 
     async function showOverview(ownSignal) {
@@ -294,7 +362,8 @@ export async function loadSecurity(_viewer, signal) {
                     ['Активные сессии', report.active_sessions], ['Заблокированные аккаунты', report.blocked_users],
                     ['Неудачные попытки за ' + count(report.attempt_period_hours) + ' ч', report.failed_attempts],
                 ].map(([key, value]) => el('div', {}, el('dt', {}, key), el('dd', {}, count(value))))),
-                report.attempt_tracking_since && el('p', { class: 'admin-tool-meta' }, 'Начало учёта попыток ', timestamp(report.attempt_tracking_since)),
+                ...(report.attempt_tracking_since ? [el('p', { class: 'admin-tool-meta' }, 'Начало учёта попыток ',
+                    timestamp(report.attempt_tracking_since))] : []),
                 el('h2', {}, 'Недавние события безопасности'), auditTable(report.recent ?? []));
         }
         draw();
@@ -313,13 +382,16 @@ export async function loadSecurity(_viewer, signal) {
     async function showSessions(ownSignal, offset = 0) {
         box.setAttribute('aria-busy', 'true');
         try {
-            const data = await request(pathWithQuery('/admin/nexus/sessions', { limit: 30, offset }), { signal: ownSignal });
+            const data = await request(pathWithQuery('/admin/nexus/sessions', { limit: sessionPageSize, offset }), { signal: ownSignal });
             if (ownSignal.aborted) return;
-            const reload = () => showSessions(ownSignal, data.sessions.length <= 1 ? Math.max(0, offset - 30) : offset);
+            function goTo(position) {
+                updatePanelUrl({ page: offsetPage(position, sessionPageSize) });
+                return showSessions(ownSignal, position);
+            }
+            const reload = () => goTo(data.sessions.length <= 1 ? Math.max(0, offset - sessionPageSize) : offset);
             box.replaceChildren(el('div', { class: 'admin-db-header' }, el('h2', {}, 'Активные сессии'),
                 button('Обновить', afterAction(() => showSessions(ownSignal, offset)), 'subtle')),
-            userSessionTable(data.sessions, reload, ownSignal), paging(data.offset, data.limit, data.total,
-                position => showSessions(ownSignal, position)));
+            userSessionTable(data.sessions, reload, ownSignal), paging(data.offset, data.limit, data.total, goTo));
         } catch (error) {
             if (!ownSignal.aborted) message.textContent = error.message;
         } finally {
@@ -327,19 +399,26 @@ export async function loadSecurity(_viewer, signal) {
         }
     }
 
-    function showLog(ownSignal, errors) {
+    function showLog(ownSignal, errors, restoredParams) {
         const result = el('div', { class: 'admin-tool-stack' });
         const pager = el('nav', { class: 'toolbar', 'aria-label': 'Страницы журнала' });
+        const level = restoredParams.get('level');
+        let filters = { search: '', level: !errors && ['info', 'warning'].includes(level) ? level : '',
+            from: isoParam(restoredParams, 'from'), to: isoParam(restoredParams, 'to') };
+        if (filters.from && filters.to && filters.from > filters.to) {
+            filters.from = '';
+            filters.to = '';
+        }
+        let position = errors ? undefined : cursorParam(restoredParams);
         const search = textField('Поиск', 'search', '', { type: 'search', maxlength: 120, placeholder: errors ? 'Сервис или код' : 'Событие, пользователь, объект' });
         const form = el('form', { class: 'filters admin-query-bar' }, search,
-            textField('С', 'from', '', { type: 'datetime-local' }), textField('По', 'to', '', { type: 'datetime-local' }),
-            !errors && selectField('Уровень', 'level', [['', 'Все'], ['info', 'Действия'], ['warning', 'Предупреждения']]),
+            textField('С', 'from', dateInput(filters.from), { type: 'datetime-local' }),
+            textField('По', 'to', dateInput(filters.to), { type: 'datetime-local' }),
+            !errors && selectField('Уровень', 'level', [['', 'Все'], ['info', 'Действия'], ['warning', 'Предупреждения']], filters.level),
             submit('Применить'));
         const live = el('p', { class: 'admin-tool-meta', 'aria-live': 'polite' });
         const tools = el('div', { class: 'toolbar' });
         let paused = false;
-        let filters = {};
-        let position;
         let saved = [];
         let version = 0;
         const pauseButton = button('Пауза', () => {
@@ -348,14 +427,21 @@ export async function loadSecurity(_viewer, signal) {
             pauseButton.setAttribute('aria-pressed', String(paused));
             live.textContent = paused ? 'Поток на паузе.' : 'Обновление включено.';
             if (!paused) {
-                position = undefined;
-                load();
+                goTo();
             }
         }, 'subtle', { 'aria-pressed': 'false' });
-        const exportLink = errors ? null : el('a', { class: 'button subtle', href: '/api/admin/audit?format=csv' }, 'CSV выборки');
+        const exportPath = () => '/api' + pathWithQuery('/admin/audit', { ...filters, format: 'csv' });
+        const exportLink = errors ? null : el('a', { class: 'button subtle', href: exportPath() }, 'CSV выборки');
         tools.append(pauseButton, button('Обновить', afterAction(() => load()), 'subtle'));
         if (exportLink) tools.append(exportLink);
         else tools.append(button('JSON выборки', () => downloadJson('itd-system-errors.json', groupErrors(saved)), 'subtle'));
+
+        function goTo(cursor) {
+            position = cursor;
+            updatePanelUrl({ from: filters.from, to: filters.to, level: filters.level,
+                before: !filters.search && cursor ? cursor : null });
+            return load();
+        }
 
         async function load() {
             const generation = ++version;
@@ -373,8 +459,8 @@ export async function loadSecurity(_viewer, signal) {
                 } else {
                     result.replaceChildren(auditTable(response.entries));
                     pager.replaceChildren(
-                        position && button('К новым', () => { position = undefined; load(); }, 'subtle compact'),
-                        response.next && button('К более ранним', () => { position = response.next; load(); }, 'subtle compact'));
+                        position && button('К новым', () => goTo(), 'subtle compact'),
+                        response.next && button('К более ранним', () => goTo(response.next), 'subtle compact'));
                 }
                 live.textContent = paused ? 'Поток на паузе.' : position ? 'Показана предыдущая часть журнала.'
                     : 'Обновляется каждые 12 с · ' + new Intl.DateTimeFormat('ru-RU', { timeStyle: 'medium' }).format();
@@ -396,15 +482,15 @@ export async function loadSecurity(_viewer, signal) {
         form.addEventListener('submit', event => {
             event.preventDefault();
             const fields = new FormData(form);
-            filters = { search: fields.get('search').trim(), level: fields.get('level') ?? '',
+            const next = { search: fields.get('search').trim(), level: fields.get('level') ?? '',
                 from: toIso(fields.get('from')), to: toIso(fields.get('to')) };
-            if (filters.from && filters.to && filters.from > filters.to) {
+            if (next.from && next.to && next.from > next.to) {
                 message.textContent = 'Начало периода должно быть раньше окончания.';
                 return;
             }
-            position = undefined;
-            if (exportLink) exportLink.href = '/api' + pathWithQuery('/admin/audit', { ...filters, format: 'csv' });
-            load();
+            filters = next;
+            if (exportLink) exportLink.href = exportPath();
+            goTo();
         });
         box.replaceChildren(el('div', { class: 'admin-db-header' }, el('h2', {}, errors ? 'Ошибки сервисов' : 'Журнал действий'), tools),
             form, live, result, pager);
@@ -412,7 +498,8 @@ export async function loadSecurity(_viewer, signal) {
         schedule();
     }
 
-    open('overview');
+    const restoredSection = params.get('section');
+    open(Object.hasOwn(titles, restoredSection) ? restoredSection : 'overview', params);
     return el('section', { class: 'admin-tool-stack' }, heading('Безопасность', 'Сессии, история входов и операции администрирования.'),
         controls, message, box);
 }

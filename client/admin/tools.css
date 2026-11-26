@@ -4,6 +4,16 @@
 .admin-entry-details summary { color: var(--gold); cursor: pointer; }
 .admin-db-layout { display: grid; grid-template-columns: minmax(160px, 235px) minmax(0, 1fr); gap: 1rem; align-items: start; min-width: 0; }
 .admin-db-layout .table-frame { max-width: 100%; overflow-x: auto; }
+.admin-db-layout :is(.admin-db-id, .admin-db-date) {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+}
+.admin-db-layout .admin-db-text {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
 .admin-db-tables {
     display: grid;
     gap: .3rem;

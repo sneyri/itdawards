@@ -1,4 +1,7 @@
 import { activityChart } from './charts.js';
+import { countUp, motionAllowed, reveal, typeText } from './motion.js';
+import { installKitInteractions } from './component-motion.js';
+import { readPanelUrl, updatePanelUrl } from './panel-url.js';
 import { bindForm, button, clearPanelData, confirmAction, date, dateInput, definition, el, formError,
     heading, nominationStatuses, notice, numbers, readPanelData, request, roles, selectField, status, submit, table, textField, toast, toggle } from './ui.js';
 
@@ -9,6 +12,7 @@ const panelLoader = (module, name) => async (operator, signal) => {
 const loadAccess = () => import('./access.js');
 const loadManagement = () => import('./management.js');
 const loadCatalogModule = () => import('./catalog.js');
+const loadPodium = () => import('./podium.js');
 
 async function openCatalog(operator, signal) {
     const [implementation] = await Promise.all([
@@ -19,6 +23,10 @@ async function openCatalog(operator, signal) {
 
 const view = document.getElementById('view');
 const navigation = document.getElementById('navigation');
+const desktopSidebar = navigation.parentElement;
+const mobileNavigationToggle = document.getElementById('mobile-navigation-toggle');
+const mobileNavigation = document.getElementById('mobile-navigation');
+const mobileLayout = window.matchMedia('(max-width: 900px)');
 const panels = [
     ['overview', 'Обзор', loadOverview, '◫'],
     ['catalog', 'Каталог', openCatalog, '◇'],
@@ -83,10 +91,27 @@ async function loadOverview(_operator, signal) {
     const phase = el('strong', { class: 'command-phase' });
     const phaseHint = el('span', { class: 'muted' });
     const warnings = el('div', { 'aria-live': 'polite' });
-    const votes = el('strong', { class: 'command-number' }, numeric(stats.votes));
-    const turnout = stats.users ? Math.round(stats.voters / stats.users * 100) : 0;
+    const scene = el('div', { class: 'award-scene', 'aria-hidden': 'true' },
+        el('div', { class: 'award-scene__fallback' }, el('span', { class: 'award-scene__emblem' }, 'ITD')));
+    let lastError;
+    const votes = el('strong', { class: 'command-number' });
+    let displayedTotal;
+    let finishCount;
+    const eligible = stats.eligible_voters;
+    const participated = stats.eligible_voters_participated;
+    const turnout = Number.isInteger(eligible) && eligible > 0 && Number.isInteger(participated)
+        ? Math.round(participated / eligible * 100) + '%' : '—';
     function update(report) {
-        votes.textContent = numeric(report?.stats?.votes ?? stats.votes);
+        const total = report?.stats?.votes ?? stats.votes ?? 0;
+        if (total !== displayedTotal) {
+            finishCount?.();
+            finishCount = countUp(votes, Number(total), { signal, format: numeric, from: Number(displayedTotal ?? 0) });
+            displayedTotal = total;
+        }
+        const latestError = report?.recent_errors?.[0];
+        const errorKey = latestError ? JSON.stringify(latestError) : null;
+        if (lastError !== undefined && errorKey && errorKey !== lastError) scene.dispatchEvent(new Event('admin:activity'));
+        lastError = errorKey;
         const state = report?.phase ?? (stats.voting_open ? 'voting' : 'closed');
         phase.textContent = formatPhase(state);
         phaseHint.textContent = report ? 'Состояние обновляется автоматически' : 'По последним доступным данным';
@@ -104,30 +129,38 @@ async function loadOverview(_operator, signal) {
     }
     update(currentTelemetry);
     window.addEventListener('admin:telemetry', event => update(event.detail.report), { signal });
-    const orbit = el('div', { class: 'command-orbit', 'aria-hidden': 'true' },
-        el('span', { class: 'command-orbit__ring' }), el('span', { class: 'command-orbit__core' }, 'ITD'));
-    const hero = el('section', { class: 'command-hero' }, orbit,
+    const eyebrow = el('p', { class: 'command-eyebrow' });
+    typeText(eyebrow, 'ITD AWARDS / УПРАВЛЕНИЕ ПРЕМИЕЙ', { signal });
+    const hero = el('section', { class: 'command-hero ops-hero' }, scene,
         el('div', { class: 'command-hero__content' },
-            el('p', { class: 'command-eyebrow' }, 'ITD AWARDS / ЦЕНТР УПРАВЛЕНИЯ'),
-            el('h1', {}, 'Премия в движении'),
+            eyebrow,
+            el('h1', { class: 'terminal-heading' }, 'Премия в движении'),
             el('div', { class: 'command-phase-line' }, phase, phaseHint),
             el('div', { class: 'command-actions' }, pageHref('Управлять голосованием', 'voting', 'primary'),
-                pageHref('Открыть каталог', 'catalog', 'subtle'))),
-        el('div', { class: 'command-hero__metric' }, el('span', {}, 'ВСЕГО ГОЛОСОВ'), votes,
-            el('span', {}, numeric(stats.voters) + ' участников проголосовали')));
+                pageHref('Открыть каталог', 'catalog', 'subtle')),
+            el('div', { class: 'command-hero__metric' }, el('span', {}, 'ВСЕГО ГОЛОСОВ'), votes,
+                el('span', {}, numeric(stats.voters) + ' участников проголосовали'))));
+    void import('./award-scene.js').then(({ prepareAwardScene }) => prepareAwardScene(scene, signal)).catch(() => {});
+    const metrics = el('div', { class: 'command-metrics' },
+        el('div', {}, el('span', {}, 'Участие'), el('strong', {}, turnout),
+            el('small', { title: 'Участие = проголосовавшие участники и жюри ÷ все участники и жюри с незаблокированным аккаунтом × 100%.' },
+                eligible === 0 ? 'Нет доступных аккаунтов'
+                    : turnout === '—' ? 'Нет данных об участии'
+                        : numeric(participated) + ' из ' + numeric(eligible) + ' с правом голоса')),
+        el('div', {}, el('span', {}, 'Пользователи'), el('strong', {}, numeric(stats.users)), el('small', {}, numeric(stats.registered) + ' вошли в аккаунт')),
+        el('div', {}, el('span', {}, 'Каталог'), el('strong', {}, numeric(stats.nominations)), el('small', {}, numeric(stats.nominees) + ' номинантов')),
+        el('div', {}, el('span', {}, 'Приглашения'), el('strong', {}, numeric(stats.invitations_active)), el('small', {}, 'доступных кодов')));
+    reveal(metrics.children, { signal });
     return el('section', { class: 'page-stack command-center' }, hero,
-        el('div', { class: 'command-metrics' },
-            el('div', {}, el('span', {}, 'Участие'), el('strong', {}, turnout + '%'), el('small', {}, 'от всех пользователей')),
-            el('div', {}, el('span', {}, 'Пользователи'), el('strong', {}, numeric(stats.users)), el('small', {}, numeric(stats.registered) + ' вошли в аккаунт')),
-            el('div', {}, el('span', {}, 'Каталог'), el('strong', {}, numeric(stats.nominations)), el('small', {}, numeric(stats.nominees) + ' номинантов')),
-            el('div', {}, el('span', {}, 'Приглашения'), el('strong', {}, numeric(stats.invitations_active)), el('small', {}, 'доступных кодов'))),
+        el('div', { class: 'command-attention' },
+            panel('Внимание', warnings, pageHref('Диагностика', 'system', 'subtle compact')),
+            panel('Сервисы', services, pageHref('Подробнее', 'system', 'subtle compact'))),
+        metrics,
         el('div', { class: 'command-grid' },
             el('div', { class: 'page-stack' },
                 panel('Динамика участия', activityChart(stats.trends ?? [], signal), null, 'Последние 30 дней · UTC'),
                 panel('Последние события', eventList(stats.recent_actions))),
             el('div', { class: 'page-stack' },
-                panel('Внимание', warnings, pageHref('Диагностика', 'system', 'subtle compact')),
-                panel('Сервисы', services, pageHref('Подробнее', 'system', 'subtle compact')),
                 panel('Быстрые действия', el('div', { class: 'command-shortcuts' },
                     pageHref('Пригласить участника', 'invitations', 'subtle'),
                     pageHref('Управление пользователями', 'users', 'subtle'),
@@ -177,26 +210,20 @@ function resultTables(rows) {
     if (!groups.size) return el('p', { class: 'empty' }, 'Нет данных по номинантам.');
     return el('div', { class: 'list-detail' }, [...groups.values()].map(group =>
         el('details', {}, el('summary', {}, group[0].title),
-            el('div', { class: 'result-comparison' }, compareResults(group),
-                table(['Номинант', 'Голоса', 'Жюри', 'Баллы', 'Статус'], group.map(row =>
-                    [row.name, numeric(row.vote_count), numeric(row.jury_votes), numeric(row.weighted_score), row.archived ? 'Архив' : 'В каталоге']))))));
-}
-
-function compareResults(group) {
-    const scored = group.filter(row => !row.archived && row.weighted_score > 0).slice(0, 8);
-    if (!scored.length) return null;
-    const maximum = Math.max(...scored.map(row => row.weighted_score));
-    return el('div', { class: 'bar-list' }, scored.map(row => el('div', { class: 'bar-row' },
-        el('div', { class: 'bar-label' }, el('span', {}, row.name), el('strong', {}, numeric(row.weighted_score) + ' баллов')),
-        el('progress', { max: maximum, value: row.weighted_score, 'aria-label': 'Баллы · ' + row.name }))));
+            el('div', { class: 'result-comparison' },
+                table(['Номинант', 'Всего голосов', 'Обычные голоса', 'Жюри', 'Баллы', 'Статус'], group.map(row =>
+                    [row.name, numeric(row.vote_count), numeric(row.user_votes), numeric(row.jury_votes),
+                        numeric(row.weighted_score), row.archived ? 'Архив' : 'В каталоге']))))));
 }
 
 async function loadVoting(operator, signal) {
     const owner = operator.role === 'SUPERADMIN';
-    const [settings, stats, results] = await Promise.all([
+    const [settings, stats, results, podium, catalog] = await Promise.all([
         request('/admin/settings', { signal }),
         readPanelData('/admin/stats'),
         owner ? request('/admin/results', { signal }) : [],
+        owner ? loadPodium() : null,
+        owner ? readPanelData('/admin/catalog').catch(() => []) : [],
     ]);
     const publication = settings.results_published;
     const label = publication ? 'Снять с публикации' : 'Опубликовать итоги';
@@ -208,7 +235,21 @@ async function loadVoting(operator, signal) {
             toast(publication ? 'Итоги сняты с публикации.' : 'Итоги опубликованы.');
         }), publication ? 'danger' : 'primary', { disabled: !publication && settings.voting_open });
     const voteRows = stats.nomination_votes.map(row => [row.title, rowStatus(row), numeric(row.vote_count)]);
-    return el('section', {}, heading('Голосование', 'Расписание, динамика голосования и итоговые результаты.'),
+    const ledger = owner ? el('div', {}, resultTables(results)) : null;
+    return el('section', { class: 'page-stack' }, heading('Голосование', 'Расписание, динамика голосования и итоговые результаты.'),
+        owner ? el('section', { class: 'panel stacked' },
+            el('div', { class: 'panel-head' }, el('h2', {}, stats.voting_open ? 'Текущие лидеры' : 'Итоговые результаты')),
+            el('p', { class: 'voting-source' }, 'Выборы из формы «Голоса жюри» в эти итоги пока не входят.'),
+            podium.resultsPodium(results, { signal, catalog, isPreliminary: stats.voting_open, allowCeremony: true,
+                onResults: updated => ledger.replaceChildren(resultTables(updated)) }),
+            el('div', { class: 'toolbar voting-actions' },
+                el('a', { class: 'button subtle', href: '/api/admin/results.csv' }, 'Скачать CSV'),
+                el('a', { class: 'button subtle', href: '/api/admin/results', download: 'itd-awards-results.json' }, 'Скачать JSON'),
+                changePublication),
+            el('details', {}, el('summary', {}, 'Как посчитаны баллы'),
+                el('p', { class: 'muted' }, 'Обычные голоса + сумма сохранённых весов жюри = баллы. При одинаковом весе сумма равна числу голосов жюри × этот вес.'),
+                !publication && settings.voting_open ? el('p', {}, 'Закройте голосование, чтобы опубликовать итоги.') : null),
+            el('details', {}, el('summary', {}, 'Полная ведомость'), ledger)) : null,
         panel('Динамика голосования', activityChart(stats.trends ?? [], signal), null, 'Последние 30 дней, UTC'),
         panel('Период и правила', settingsForm(settings, owner, signal),
             stats.voting_open ? status('Приём голосов открыт', 'ok') : status('Приём голосов закрыт', 'warn')),
@@ -218,14 +259,7 @@ async function loadVoting(operator, signal) {
             votingTimeline(settings, stats)),
         el('section', { class: 'panel stacked' }, el('div', { class: 'panel-head' }, el('h2', {}, 'Статус номинаций'),
             pageHref('Изменить в каталоге', 'catalog', 'subtle compact')),
-        table(['Номинация', 'Статус', 'Голоса'], voteRows)),
-        owner ? el('section', { class: 'panel stacked' },
-            el('div', { class: 'panel-head' }, el('h2', {}, 'Итоговые результаты'),
-                el('div', { class: 'toolbar' }, el('a', { class: 'button subtle', href: '/api/admin/results.csv' }, 'Скачать CSV'),
-                    el('a', { class: 'button subtle', href: '/api/admin/results', download: 'itd-awards-results.json' }, 'Скачать JSON'),
-                    changePublication)),
-            !publication && settings.voting_open ? notice('Закройте голосование, чтобы опубликовать итоги.') : null,
-            resultTables(results)) : null);
+        table(['Номинация', 'Статус', 'Голоса'], voteRows)));
 }
 
 function renderVoteHealth(signal) {
@@ -244,20 +278,25 @@ function renderVoteHealth(signal) {
 
 async function loadJuryVotes(_operator, signal) {
     const data = await request('/admin/jury-votes', { signal });
+    const { params } = readPanelUrl();
     const nominationChoices = [['', 'Все номинации'], ...data.nominations.map(nomination =>
         [String(nomination.id), nomination.title])];
-    const filter = selectField('Номинация', 'nomination_id', nominationChoices);
+    const requested = params.get('nomination');
+    const initial = nominationChoices.some(([id]) => id === requested) ? requested : '';
+    const filter = selectField('Номинация', 'nomination_id', nominationChoices, initial);
     const results = el('div', { class: 'page-stack' });
     const view = el('section', { class: 'page-stack' },
-        heading('Голоса жюри', 'Анонимные голоса, обоснования и количество выборов по номинациям.'),
+        heading('Голоса жюри', 'Обоснования жюри, с авторами. Количество выборов по каждой номинации.'),
         filter, results);
 
-    function render(result) {
-        if (!result.nominations.length) {
+    function render(result, selected = '') {
+        const nominations = selected
+            ? result.nominations.filter(row => String(row.id) === selected) : result.nominations;
+        if (!nominations.length) {
             results.replaceChildren(notice('Номинаций пока нет.'));
             return;
         }
-        results.replaceChildren(...result.nominations.map(nomination => {
+        results.replaceChildren(...nominations.map(nomination => {
             const counts = result.counts.filter(row => row.nomination_id === nomination.id);
             const rows = [
                 ...result.votes.filter(row => row.nomination_id === nomination.id).map(row => ({
@@ -311,10 +350,11 @@ async function loadJuryVotes(_operator, signal) {
         }));
     }
 
-    render(data);
+    render(data, initial);
     const select = filter.querySelector('select');
     let activeController;
     select?.addEventListener('change', async () => {
+        updatePanelUrl({ nomination: select.value });
         activeController?.abort();
         const controller = new AbortController();
         activeController = controller;
@@ -449,9 +489,9 @@ async function showPanel() {
     const controller = new AbortController();
     const { signal } = controller;
     pending = controller;
-    const hash = location.hash.slice(1);
-    const id = { audit: 'security', lab: 'overview', constellation: 'catalog' }[hash] ?? hash;
+    const { id } = readPanelUrl();
     const [section, title, load] = visible.find(item => item[0] === id) ?? visible[0];
+    view.dataset.section = section;
     document.getElementById('section-name').textContent = title;
     document.title = title + ' · ITD Awards';
     for (const link of navigation.querySelectorAll('a')) {
@@ -466,6 +506,16 @@ async function showPanel() {
         const content = await load(viewer, signal);
         if (signal.aborted) return;
         view.replaceChildren(content);
+        if (section !== 'overview') {
+            const blocks = [...content.querySelectorAll('.panel, .table-frame, .admin-security-stats > div')]
+                .filter(block => !block.parentElement.closest('.panel, .table-frame'));
+            reveal(blocks, { signal, interval: 45 });
+        }
+        if (motionAllowed() && content.animate) {
+            const transition = content.animate([{ opacity: .65, transform: 'translateY(5px)' },
+                { opacity: 1, transform: 'translateY(0)' }], { duration: 190, easing: 'ease-out' });
+            signal.addEventListener('abort', () => transition.cancel(), { once: true });
+        }
     } catch (error) {
         if (!signal.aborted) fail(error);
     } finally {
@@ -490,7 +540,7 @@ async function init() {
                 el('span', { 'aria-hidden': 'true', class: 'nav-icon' }, icon), label)));
         startTelemetry();
         await showPanel();
-        if (location.hash === '' || location.hash === '#overview') {
+        if (readPanelUrl().id === 'overview') {
             const warmCatalog = () => {
                 if (!document.hidden && !navigator.connection?.saveData && !runtime.signal.aborted) {
                     void loadCatalogModule().catch(() => {});
@@ -506,24 +556,120 @@ async function init() {
 
 const commandDialog = document.getElementById('command-dialog');
 const commandOpen = document.getElementById('command-open');
+const actionDialog = document.getElementById('dialog');
+const sessionActions = document.getElementById('session-actions');
+const desktopActions = sessionActions.parentElement;
+
+function syncNavigationLayout() {
+    const active = document.activeElement;
+    const focused = navigation.contains(active) || sessionActions.contains(active) ? active : null;
+    if (mobileLayout.matches) {
+        mobileNavigation.append(navigation, sessionActions);
+        if (focused) mobileNavigationToggle.focus();
+    } else {
+        const wasOpen = mobileNavigation.open;
+        if (wasOpen) mobileNavigation.close();
+        desktopSidebar.append(navigation);
+        desktopActions.append(sessionActions);
+        (focused ?? (wasOpen ? navigation.querySelector('[aria-current="page"]') : null))?.focus();
+    }
+}
+
+mobileLayout.addEventListener('change', syncNavigationLayout);
+syncNavigationLayout();
+mobileNavigationToggle.addEventListener('click', () => {
+    if (!viewer || !mobileLayout.matches || mobileNavigation.open || commandDialog.open || actionDialog.open) return;
+    mobileNavigation.returnValue = '';
+    mobileNavigation.showModal();
+    mobileNavigationToggle.setAttribute('aria-expanded', 'true');
+});
+mobileNavigation.querySelector('.mobile-navigation__close').addEventListener('click', () => mobileNavigation.close());
+mobileNavigation.addEventListener('close', () => {
+    mobileNavigationToggle.setAttribute('aria-expanded', 'false');
+    if (mobileNavigation.returnValue === 'navigate') document.getElementById('workspace').focus();
+});
+mobileNavigation.addEventListener('keydown', event => {
+    if (event.key !== 'Tab') return;
+    const items = [...mobileNavigation.querySelectorAll('button:not([disabled]), a[href]')];
+    const first = items[0];
+    const last = items.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+    }
+});
+navigation.addEventListener('click', event => {
+    if (mobileNavigation.open && event.target.closest('a[href]') && !event.ctrlKey && !event.metaKey
+        && !event.shiftKey && !event.altKey) mobileNavigation.close('navigate');
+});
+
 function openCommands() {
-    if (!viewer || commandDialog.open || document.getElementById('dialog').open) return;
-    const input = el('input', { type: 'search', class: 'command-search', placeholder: 'Название раздела', 'aria-label': 'Поиск раздела', autocomplete: 'off' });
+    if (!viewer || commandDialog.open || actionDialog.open || document.querySelector('.ceremony-dialog[open]')) return;
+    if (mobileNavigation.open) mobileNavigation.close();
+    const input = el('input', { type: 'search', class: 'command-search', placeholder: 'go catalog', 'aria-label': 'Команда или название раздела', autocomplete: 'off', spellcheck: 'false' });
     const list = el('div', { class: 'command-list', 'aria-live': 'polite' });
+    const output = el('p', { class: 'command-output mono', role: 'status' });
+    const session = new AbortController();
+    commandDialog.addEventListener('close', () => session.abort(), { once: true, signal: session.signal });
+    function navigate(hash) {
+        commandDialog.close();
+        if (location.hash !== '#' + hash) location.hash = hash;
+    }
+    async function runCommand() {
+        const command = input.value.trim();
+        const lower = command.toLocaleLowerCase('ru');
+        if (lower === 'refresh' || lower === 'effects off') {
+            commandDialog.close();
+            if (lower === 'refresh') document.getElementById('refresh-panel').click();
+            else if (effectsEnabled) effectsToggle.click();
+            return;
+        }
+        if (lower.startsWith('go ')) {
+            const target = lower.slice(3).trim();
+            const panel = visible.find(([id, title]) => id === target || title.toLocaleLowerCase('ru') === target);
+            if (panel) navigate(panel[0]);
+            else output.textContent = 'Раздел недоступен или не найден.';
+            return;
+        }
+        const nomination = /^open\s+nomination\s+(.+)$/iu.exec(command)?.[1]?.trim().toLocaleLowerCase('ru');
+        if (!nomination) {
+            list.querySelector('button')?.click();
+            return;
+        }
+        output.textContent = 'Ищем номинацию…';
+        try {
+            const catalog = await readPanelData('/admin/catalog');
+            if (session.signal.aborted || !commandDialog.open || command !== input.value.trim()) return;
+            const exact = catalog.filter(row => row.title.toLocaleLowerCase('ru') === nomination);
+            const matches = exact.length ? exact : catalog.filter(row => row.title.toLocaleLowerCase('ru').includes(nomination));
+            if (matches.length === 1) navigate('catalog?nomination=' + matches[0].id);
+            else output.textContent = matches.length ? 'Уточните полное название номинации.' : 'Номинация не найдена.';
+        } catch (error) {
+            if (!session.signal.aborted && commandDialog.open) output.textContent = error.message;
+        }
+    }
     const render = () => {
         const query = input.value.trim().toLocaleLowerCase('ru');
+        output.textContent = '';
+        if (/^(go|open|refresh|effects)(\s|$)/u.test(query)) {
+            list.replaceChildren();
+            return;
+        }
         const matches = visible.filter(([, title]) => title.toLocaleLowerCase('ru').includes(query));
         list.replaceChildren(...(matches.length ? matches.map(([id, title, , icon]) =>
             button([el('span', { class: 'command-item-icon', 'aria-hidden': 'true' }, icon),
                 el('span', {}, title), el('span', { class: 'command-item-key', 'aria-hidden': 'true' }, '↵')], () => {
-                commandDialog.close(); location.hash = id;
+                navigate(id);
             }, 'command-item')) : [el('p', { class: 'empty' }, 'Раздел не найден')]));
     };
     input.addEventListener('input', render);
     input.addEventListener('keydown', event => {
         if (event.key === 'Escape') { event.preventDefault(); commandDialog.close(); return; }
         if (event.key === 'ArrowDown') { event.preventDefault(); list.querySelector('button')?.focus(); }
-        if (event.key === 'Enter') { event.preventDefault(); list.querySelector('button')?.click(); }
+        if (event.key === 'Enter') { event.preventDefault(); void runCommand(); }
     });
     list.addEventListener('keydown', event => {
         const items = [...list.querySelectorAll('button')];
@@ -535,8 +681,10 @@ function openCommands() {
         }
     });
     commandDialog.replaceChildren(el('div', { class: 'command-dialog__head' },
-        el('div', {}, el('p', { class: 'command-eyebrow' }, 'ITD AWARDS / НАВИГАЦИЯ'), el('h2', { id: 'command-title' }, 'Перейти к разделу')),
-        button('×', () => commandDialog.close(), 'subtle icon-only', { 'aria-label': 'Закрыть' })), input, list,
+        el('div', {}, el('p', { class: 'command-eyebrow' }, 'ITD AWARDS / ТЕРМИНАЛ'), el('h2', { id: 'command-title', class: 'terminal-heading' }, 'Перейти к разделу')),
+        button('×', () => commandDialog.close(), 'subtle icon-only', { 'aria-label': 'Закрыть' })),
+        el('div', { class: 'terminal-prompt' }, el('span', { 'aria-hidden': 'true' }, '$'), input), output, list,
+        el('p', { class: 'command-help mono' }, 'go catalog · open nomination <название> · refresh · effects off'),
         el('p', { class: 'command-help' }, '↑ ↓ выбор   ·   Enter открыть   ·   Esc закрыть'));
     render(); commandDialog.showModal(); input.focus();
 }
@@ -555,6 +703,7 @@ function updateEffects() {
     document.body.classList.toggle('effects-off', !effectsEnabled);
     effectsToggle.setAttribute('aria-pressed', String(effectsEnabled));
     effectsToggle.textContent = effectsEnabled ? 'Эффекты: вкл.' : 'Эффекты: выкл.';
+    document.dispatchEvent(new Event('admin:effects'));
 }
 effectsToggle.addEventListener('click', () => {
     effectsEnabled = !effectsEnabled;
@@ -562,9 +711,21 @@ effectsToggle.addEventListener('click', () => {
     updateEffects();
 });
 updateEffects();
-document.addEventListener('visibilitychange', () => document.body.classList.toggle('motion-paused', document.hidden));
+installKitInteractions(runtime.signal);
+const startBackground = () => {
+    if (!viewer || runtime.signal.aborted) return;
+    void import('./perceptron.js').then(({ startPerceptron }) => startPerceptron(runtime.signal)).catch(() => {});
+};
+function updateMotionVisibility() {
+    document.body.classList.toggle('motion-paused', document.hidden);
+}
+updateMotionVisibility();
+document.addEventListener('visibilitychange', updateMotionVisibility, { signal: runtime.signal });
 
-window.addEventListener('hashchange', () => { if (viewer) showPanel(); });
+window.addEventListener('hashchange', () => {
+    if (mobileNavigation.open) mobileNavigation.close('navigate');
+    if (viewer) showPanel();
+});
 document.getElementById('refresh-panel').addEventListener('click', () => {
     clearPanelData();
     if (viewer) showPanel();
@@ -578,4 +739,7 @@ document.getElementById('logout').addEventListener('click', async () => {
     try { await request('/auth/logout', { method: 'POST', data: {} }); location.replace('/'); }
     catch (error) { toast(error.message, true); }
 });
-init();
+void init().then(() => {
+    if ('requestIdleCallback' in window) window.requestIdleCallback(startBackground);
+    else setTimeout(startBackground, 250);
+});
