@@ -20,13 +20,14 @@ const userSort = {
 };
 
 export async function listUsers(req, res) {
-    const { telegram_id: telegramId, q, role, blocked, sort = 'created_desc', offset = '0' } = req.query;
+    const { telegram_id: telegramId, q, role, blocked, activity, sort = 'created_desc', offset = '0' } = req.query;
     if (telegramId !== undefined && !parseTelegramId(telegramId)) {
         return sendError(res, 400, 'invalid_input', 'Укажите точный числовой Telegram ID.');
     }
     if ((q !== undefined && (typeof q !== 'string' || q.length > 120 || q.includes('\0')))
         || (role !== undefined && !roles.includes(role))
         || (blocked !== undefined && !['true', 'false'].includes(blocked))
+        || (activity !== undefined && !['recent', 'inactive', 'never'].includes(activity))
         || typeof sort !== 'string' || !Object.hasOwn(userSort, sort)
         || typeof offset !== 'string' || !/^\d{1,8}$/.test(offset)) {
         return sendError(res, 400, 'invalid_input', 'Проверьте параметры поиска.');
@@ -39,8 +40,12 @@ export async function listUsers(req, res) {
                 OR strpos(lower(username), lower($3)) > 0 OR telegram_id::text = $3 OR id::text = lower($3))
             AND ($4::text IS NULL OR role = $4)
             AND ($5::boolean IS NULL OR blocked = $5)
+            AND ($7::text IS NULL
+                OR ($7 = 'recent' AND last_login_at >= now() - interval '30 days')
+                OR ($7 = 'inactive' AND last_login_at < now() - interval '30 days')
+                OR ($7 = 'never' AND last_login_at IS NULL))
         ORDER BY ${userSort[sort]} LIMIT ${pageSize} OFFSET $6
-    `, [req.user.role === 'SUPERADMIN', telegramId, q?.trim() || null, role, blocked, Number(offset)]);
+    `, [req.user.role === 'SUPERADMIN', telegramId, q?.trim() || null, role, blocked, Number(offset), activity]);
     res.json({ data: rows });
 }
 

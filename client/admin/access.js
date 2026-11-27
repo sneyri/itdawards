@@ -77,7 +77,7 @@ function historyChange(entry) {
 function userProfile(viewer, record, onSave, signal, reopen) {
     const { user, history, participation } = record;
     const profile = el('div', { class: 'form-stack' }, definition([
-        ['Имя', accountName(user)], ['ID', user.id], ['Telegram ID', user.telegram_id],
+        ['Имя', accountName(user)], ['Username', user.username], ['ID', user.id], ['Telegram ID', user.telegram_id],
         ['Роль', taggedRole(user.role)], ['Статус', accountStatus(user.blocked)],
         ['Регистрация', date(user.created_at)], ['Последний вход', date(user.last_login_at)],
     ]), viewer.role === 'SUPERADMIN' && el('div', { class: 'toolbar' },
@@ -105,7 +105,6 @@ function userProfile(viewer, record, onSave, signal, reopen) {
                 await request('/admin/users/' + user.id, { method: 'PATCH', data: changed, signal });
                 toast('Права пользователя сохранены.');
             }
-            if (!signal.aborted && form.isConnected) document.getElementById('dialog').close();
             if (!signal.aborted) await onSave();
         });
         profile.append(form);
@@ -127,11 +126,41 @@ export async function loadUsers(viewer, signal, { query: initialQuery = '' } = {
     const pageSize = 50;
     const visibleRoles = viewer.role === 'SUPERADMIN' ? Object.entries(roles) : participantRoles;
     const statusChoices = [['', 'Все статусы'], ['false', 'Активен'], ['true', 'Заблокирован']];
+    const activityChoices = [['', 'Любой вход'], ['recent', 'За последние 30 дней'],
+        ['inactive', 'Больше 30 дней назад'], ['never', 'Ещё не входили']];
     const { params } = readPanelUrl();
+    const accountId = params.get('user');
+    if (accountId) {
+        params.delete('user');
+        const query = params.toString();
+        const back = '#users' + (query ? '?' + query : '');
+        const content = el('div', { class: 'panel', 'aria-busy': 'true' });
+        const title = heading('Профиль пользователя', '', el('a', { class: 'button subtle', href: back }, 'К списку пользователей'));
+        async function refreshProfile() {
+            content.setAttribute('aria-busy', 'true');
+            try {
+                const record = await request('/admin/users/' + encodeURIComponent(accountId), { signal });
+                if (signal.aborted) return;
+                title.querySelector('h1').textContent = accountName(record.user);
+                content.replaceChildren(userProfile(viewer, record, refreshProfile, signal, () => {
+                    document.getElementById('dialog').close();
+                    return refreshProfile();
+                }));
+            } catch (error) {
+                if (!signal.aborted) content.replaceChildren(notice(error.message, true),
+                    button('Повторить', refreshProfile, 'subtle'));
+            } finally {
+                content.removeAttribute('aria-busy');
+            }
+        }
+        await refreshProfile();
+        return el('section', { class: 'page-stack' }, title, content);
+    }
     const search = el('form', { class: 'filters' },
         textField('Поиск', 'q', initialQuery, { type: 'search', maxlength: 120, placeholder: 'Имя, логин, ID или Telegram ID' }),
         selectField('Роль', 'role', [['', 'Все роли'], ...visibleRoles], optionParam(params, 'role', visibleRoles)),
         selectField('Статус', 'blocked', statusChoices, optionParam(params, 'blocked', statusChoices)),
+        selectField('Последний вход', 'activity', activityChoices, optionParam(params, 'activity', activityChoices)),
         selectField('Сортировка', 'sort', accountSort, optionParam(params, 'sort', accountSort, 'created_desc')), submit('Найти'));
     const message = notice('', true);
     const list = el('div');
@@ -140,9 +169,11 @@ export async function loadUsers(viewer, signal, { query: initialQuery = '' } = {
     let currentPage = 1;
     let filters = new URLSearchParams();
 
-    function openProfile(user) {
-        return viewDialog(accountName(user), signal, async () => userProfile(viewer,
-            await request('/admin/users/' + user.id, { signal }), refresh, signal, () => openProfile(user)));
+    function profileLink(user) {
+        const { params } = readPanelUrl();
+        params.set('user', user.id);
+        return el('a', { class: 'button subtle compact', href: '#users?' + params.toString(),
+            'aria-label': 'Профиль · ' + accountName(user) }, 'Профиль');
     }
 
     async function refresh(page = currentPage, persist = true) {
@@ -150,6 +181,7 @@ export async function loadUsers(viewer, signal, { query: initialQuery = '' } = {
         if (persist) updatePanelUrl({
             role: filters.get('role'),
             blocked: filters.get('blocked'),
+            activity: filters.get('activity'),
             sort: filters.get('sort') === 'created_desc' ? null : filters.get('sort'),
             // Pages of a private search do not describe the shareable result set.
             page: !filters.has('q') && page > 1 ? page : null,
@@ -169,8 +201,7 @@ export async function loadUsers(viewer, signal, { query: initialQuery = '' } = {
                         el('small', { class: 'mono' }, user.id)),
                     el('span', { class: 'mono nowrap' }, user.telegram_id || '—'), taggedRole(user.role), accountStatus(user.blocked),
                     date(user.created_at), date(user.last_login_at),
-                    button('Профиль', () => openProfile(user), 'subtle compact',
-                    { 'aria-label': 'Профиль · ' + accountName(user) }),
+                    profileLink(user),
                 ]), 'Пользователи не найдены.'), pager(page, users.length === pageSize, refresh) || '');
         } catch (error) {
             if (!signal.aborted && requestedPage === requestId) message.textContent = error.message;
