@@ -205,25 +205,24 @@ function settingsForm(settings, owner, signal) {
     return form;
 }
 
-function resultTables(rows) {
+function resultTables(rows, showScores = false) {
     const groups = Map.groupBy(rows, row => row.nomination_id);
     if (!groups.size) return el('p', { class: 'empty' }, 'Нет данных по номинантам.');
     return el('div', { class: 'list-detail' }, [...groups.values()].map(group =>
         el('details', {}, el('summary', {}, group[0].title),
             el('div', { class: 'result-comparison' },
-                table(['Номинант', 'Всего голосов', 'Обычные голоса', 'Жюри', 'Баллы', 'Статус'], group.map(row =>
-                    [row.name, numeric(row.vote_count), numeric(row.user_votes), numeric(row.jury_votes),
-                        numeric(row.weighted_score), row.archived ? 'Архив' : 'В каталоге']))))));
+                table(['Номинант', 'Всего голосов', 'Обычные голоса', 'Жюри', ...(showScores ? ['Баллы'] : []), 'Статус'],
+                    [...group].sort((a, b) => a.name.localeCompare(b.name, 'ru') || a.id - b.id).map(row =>
+                        [row.name, numeric(row.vote_count), numeric(row.user_votes), numeric(row.jury_votes),
+                            ...(showScores ? [numeric(row.weighted_score)] : []), row.archived ? 'Архив' : 'В каталоге']))))));
 }
 
 async function loadVoting(operator, signal) {
     const owner = operator.role === 'SUPERADMIN';
-    const [settings, stats, results, podium, catalog] = await Promise.all([
+    const [settings, stats, results] = await Promise.all([
         request('/admin/settings', { signal }),
         readPanelData('/admin/stats'),
         owner ? request('/admin/results', { signal }) : [],
-        owner ? loadPodium() : null,
-        owner ? readPanelData('/admin/catalog').catch(() => []) : [],
     ]);
     const publication = settings.results_published;
     const label = publication ? 'Снять с публикации' : 'Опубликовать итоги';
@@ -235,21 +234,48 @@ async function loadVoting(operator, signal) {
             toast(publication ? 'Итоги сняты с публикации.' : 'Итоги опубликованы.');
         }), publication ? 'danger' : 'primary', { disabled: !publication && settings.voting_open });
     const voteRows = stats.nomination_votes.map(row => [row.title, rowStatus(row), numeric(row.vote_count)]);
-    const ledger = owner ? el('div', {}, resultTables(results)) : null;
-    return el('section', { class: 'page-stack' }, heading('Голосование', 'Расписание, динамика голосования и итоговые результаты.'),
-        owner ? el('section', { class: 'panel stacked' },
-            el('div', { class: 'panel-head' }, el('h2', {}, stats.voting_open ? 'Текущие лидеры' : 'Итоговые результаты')),
-            el('p', { class: 'voting-source' }, 'Выборы из формы «Голоса жюри» в эти итоги пока не входят.'),
-            podium.resultsPodium(results, { signal, catalog, isPreliminary: stats.voting_open, allowCeremony: true,
-                onResults: updated => ledger.replaceChildren(resultTables(updated)) }),
-            el('div', { class: 'toolbar voting-actions' },
-                el('a', { class: 'button subtle', href: '/api/admin/results.csv' }, 'Скачать CSV'),
-                el('a', { class: 'button subtle', href: '/api/admin/results', download: 'itd-awards-results.json' }, 'Скачать JSON'),
-                changePublication),
-            el('details', {}, el('summary', {}, 'Как посчитаны баллы'),
-                el('p', { class: 'muted' }, 'Обычные голоса + сумма сохранённых весов жюри = баллы. При одинаковом весе сумма равна числу голосов жюри × этот вес.'),
-                !publication && settings.voting_open ? el('p', {}, 'Закройте голосование, чтобы опубликовать итоги.') : null),
-            el('details', {}, el('summary', {}, 'Полная ведомость'), ledger)) : null,
+    const statistics = owner ? el('div', {}, resultTables(results)) : null;
+    const ledger = owner ? el('div', {}, resultTables(results, true)) : null;
+    const winners = owner ? el('div', {}, el('p', { role: 'status' }, 'Загружаем победителей…')) : null;
+    const revealWinners = owner ? el('details', { class: 'panel stacked' },
+        el('summary', { class: 'button subtle' }, 'Показать победителей'), winners,
+        el('p', { class: 'voting-source' }, 'Выборы из формы «Голоса жюри» в эти итоги пока не входят.'),
+        el('div', { class: 'toolbar voting-actions' },
+            el('a', { class: 'button subtle', href: '/api/admin/results.csv' }, 'Скачать CSV'),
+            el('a', { class: 'button subtle', href: '/api/admin/results', download: 'itd-awards-results.json' }, 'Скачать JSON'),
+            changePublication),
+        el('details', {}, el('summary', {}, 'Как посчитаны баллы'),
+            el('p', { class: 'muted' }, 'Обычные голоса + сумма сохранённых весов жюри = баллы. При одинаковом весе сумма равна числу голосов жюри × этот вес.'),
+            !publication && settings.voting_open ? el('p', {}, 'Закройте голосование, чтобы опубликовать итоги.') : null),
+        el('details', {}, el('summary', {}, 'Полная ведомость'), ledger)) : null;
+    let loaded = false;
+    async function showWinners() {
+        if (loaded || !revealWinners.open) return;
+        loaded = true;
+        try {
+            const [podium, catalog] = await Promise.all([loadPodium(), readPanelData('/admin/catalog').catch(() => [])]);
+            if (signal.aborted) return;
+            winners.replaceChildren(podium.resultsPodium(results, {
+                signal, catalog, isPreliminary: stats.voting_open, allowCeremony: true,
+                onResults: updated => {
+                    ledger.replaceChildren(resultTables(updated, true));
+                    statistics.replaceChildren(resultTables(updated));
+                },
+            }));
+        } catch (error) {
+            if (signal.aborted) return;
+            winners.replaceChildren(notice(error.message, true), button('Повторить', () => {
+                loaded = false;
+                void showWinners();
+            }, 'subtle'));
+        }
+    }
+    revealWinners?.addEventListener('toggle', event => {
+        if (event.target !== revealWinners) return;
+        revealWinners.querySelector('summary').textContent = revealWinners.open ? 'Скрыть победителей' : 'Показать победителей';
+        void showWinners();
+    }, { signal });
+    return el('section', { class: 'page-stack' }, heading('Голосование', 'Расписание, динамика голосования и статистика.'),
         panel('Динамика голосования', activityChart(stats.trends ?? [], signal), null, 'Последние 30 дней, UTC'),
         panel('Период и правила', settingsForm(settings, owner, signal),
             stats.voting_open ? status('Приём голосов открыт', 'ok') : status('Приём голосов закрыт', 'warn')),
@@ -259,7 +285,9 @@ async function loadVoting(operator, signal) {
             votingTimeline(settings, stats)),
         el('section', { class: 'panel stacked' }, el('div', { class: 'panel-head' }, el('h2', {}, 'Статус номинаций'),
             pageHref('Изменить в каталоге', 'catalog', 'subtle compact')),
-        table(['Номинация', 'Статус', 'Голоса'], voteRows)));
+        table(['Номинация', 'Статус', 'Голоса'], voteRows)),
+        owner ? panel('Голоса по номинантам', statistics) : null,
+        revealWinners);
 }
 
 function renderVoteHealth(signal) {
