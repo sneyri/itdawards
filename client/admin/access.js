@@ -111,7 +111,8 @@ function userProfile(viewer, record, onSave, signal, reopen) {
     }
     profile.append(
         el('h3', {}, 'Участие в голосовании'),
-        table(['Номинация', 'Дата голосования'], participation.map(ballot => [ballot.title, date(ballot.voted_at)]),
+        table(['Номинация', 'Выбор участника', 'Дата голосования'],
+            participation.map(ballot => [ballot.title, ballot.nominee_name ?? '—', date(ballot.voted_at)]),
             'Пользователь пока не голосовал.'),
         el('h3', {}, 'История действий'),
         table(['Действие', 'Кто выполнил', 'Изменение', 'Дата'], history.map(entry => [

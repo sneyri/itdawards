@@ -61,8 +61,10 @@ export async function getUser(req, res) {
         pool.query(`${auditQuery(`WHERE (a.target_type = 'user' AND a.target_id = $1::text)
             OR ($2::boolean AND a.actor_id = $1::text::uuid)`)} LIMIT ${pageSize}`, [id, owner]),
         pool.query(`
-            SELECT v.nomination_id, n.title, v.created_at AS voted_at
+            SELECT v.nomination_id, n.title, v.created_at AS voted_at, nominee.name AS nominee_name
             FROM votes v JOIN nominations n ON n.id = v.nomination_id
+            LEFT JOIN nominees nominee ON nominee.id = v.nominee_id
+                AND nominee.nomination_id = v.nomination_id AND v.voter_role = 'USER'
             WHERE v.user_id = $1 AND v.voter_role IS NOT NULL ORDER BY v.created_at DESC, v.nomination_id
         `, [id]),
     ]);
