@@ -6,8 +6,8 @@ export async function createJuryReview(req, res) {
     const nominationId = req.body?.nomination_id;
     const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
     if (!Number.isSafeInteger(nominationId) || nominationId < 1
-        || !content || content.includes('\0') || [...content].length > 256) {
-        return sendError(res, 400, 'invalid_review', 'Отзыв должен содержать от 1 до 256 символов и относиться к существующей номинации.');
+        || !content || content.includes('\0') || [...content].length > 1000) {
+        return sendError(res, 400, 'invalid_review', 'Отзыв должен содержать от 1 до 1000 символов и относиться к существующей номинации.');
     }
 
     const { rows: [review] } = await pool.query(`
@@ -41,9 +41,9 @@ export async function saveJuryVote(req, res) {
     const nomineeId = parseId(req.body?.nominee_id);
     const justification = typeof req.body?.justification === 'string' ? req.body.justification.trim() : '';
     if (nominationId === null || nomineeId === null || !justification
-        || justification.includes('\0') || [...justification].length > 256) {
+        || justification.includes('\0') || [...justification].length > 1000) {
         return sendError(res, 400, 'invalid_jury_vote',
-            'Выберите номинанта и укажите обоснование длиной от 1 до 256 символов.');
+            'Выберите номинанта и укажите обоснование длиной от 1 до 1000 символов.');
     }
 
     const { rows: [vote] } = await pool.query(`

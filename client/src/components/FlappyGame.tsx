@@ -70,10 +70,13 @@ export function FlappyGame({ onClose }: { onClose: () => void }) {
     setStarted(false)
 
     let animation = 0
-    const draw = () => {
+    let lastTime = 0
+    const draw = (timestamp: number) => {
+      const delta = lastTime ? Math.min((timestamp - lastTime) / 16.6667, 3) : 1
+      lastTime = timestamp
       if (state.started && !state.over) {
-        state.vy += 0.34
-        state.y += state.vy
+        state.vy += 0.34 * delta
+        state.y += state.vy * delta
         if (state.y < 14) {
           state.y = 14
           state.vy = 0
@@ -84,7 +87,7 @@ export function FlappyGame({ onClose }: { onClose: () => void }) {
           setOver(true)
         }
         for (const pipe of state.pipes) {
-          pipe.x -= 2.7
+          pipe.x -= 2.7 * delta
           if (!pipe.passed && pipe.x + 40 < 80) {
             pipe.passed = true
             state.score += 1

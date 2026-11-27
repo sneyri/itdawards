@@ -61,8 +61,8 @@ export function JuryReview({ categoryId, nominees, nomineeId, onNomineeChange }:
       setError('Выберите номинанта.')
       return
     }
-    if (!trimmed || [...trimmed].length > 256) {
-      setError('Обоснование должно содержать от 1 до 256 символов.')
+    if (!trimmed || [...trimmed].length > 1000) {
+      setError('Обоснование должно содержать от 1 до 1000 символов.')
       return
     }
 
@@ -159,7 +159,7 @@ export function JuryReview({ categoryId, nominees, nomineeId, onNomineeChange }:
               id={`jury-justification-${categoryId}`}
               value={justification}
               onChange={(event) => setJustification(event.target.value)}
-              maxLength={256}
+              maxLength={1000}
               rows={4}
               disabled={pending}
               placeholder="Почему этот номинант достоин победы?"
@@ -167,7 +167,7 @@ export function JuryReview({ categoryId, nominees, nomineeId, onNomineeChange }:
             />
           </label>
           <div className="jury-vote__footer">
-            <span aria-live="polite">{[...justification].length}/256</span>
+            <span aria-live="polite">{[...justification].length}/1000</span>
             <button type="submit" className="button button--gold" disabled={pending || !nominees.length}>
               {pending ? 'Отправляем…' : 'Отправить голос'}
               <Check size={16} aria-hidden="true" />
